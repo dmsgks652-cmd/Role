@@ -315,24 +315,34 @@
             <pre class="code-box"><code id="gasCodeSnippet">// Google Apps Script (Code.gs)
 function doGet(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName('역할설정') || ss.getSheets()[0];
-  var data = sheet.getDataRange().getValues();
-  // 1행 헤더(학생이름, 역할이름, 역할설명)
   var students = [];
   var roles = [];
-  for (var i = 1; i &lt; data.length; i++) {
-    if (data[i][0]) students.push(data[i][0]);
-    if (data[i][1]) {
-      roles.push({
-        title: data[i][1],
-        desc: data[i][2] || ''
-      });
+  var sheets = ss.getSheets();
+  sheets.forEach(function(sheet) {
+    if (sheet.getName() === '배정결과') return;
+    var data = sheet.getDataRange().getDisplayValues();
+    if (!data.length) return;
+    var headers = data[0].map(function(v) { return String(v).replace(/\\s/g, ''); });
+    function column(names) {
+      for (var i = 0; i &lt; names.length; i++) {
+        var idx = headers.indexOf(names[i]);
+        if (idx !== -1) return idx;
+      }
+      return -1;
     }
-  }
+    var studentCol = column(['학생이름', '학생명', '성명', '이름']);
+    var roleCol = column(['역할명', '역할이름', '역할', '담당역할']);
+    var descCol = column(['역할설명', '역할내용', '업무내용', '설명', '업무']);
+    for (var row = 1; row &lt; data.length; row++) {
+      if (studentCol &gt;= 0 &amp;&amp; data[row][studentCol]) students.push(String(data[row][studentCol]).trim());
+      if (roleCol &gt;= 0 &amp;&amp; data[row][roleCol]) {
+        roles.push({ title: String(data[row][roleCol]).trim(),
+          desc: descCol &gt;= 0 ? String(data[row][descCol] || '').trim() : '' });
+      }
+    }
+  });
   return ContentService.createTextOutput(JSON.stringify({
-    status: 'success',
-    students: students,
-    roles: roles
+    status: 'success', students: students, roles: roles
   })).setMimeType(ContentService.MimeType.JSON);
 }
 

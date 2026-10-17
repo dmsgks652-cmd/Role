@@ -1,6 +1,8 @@
 /**
- * 우리 반 1인 1역할 배정 도우미 - script.js
- * 초등학생 눈높이에 맞춘 1인 1역할 랜덤 배정 및 A4 인쇄, 구글 시트 연동 로직
+ * 우리 반 1인 1역할 배정 도우미 - script.js (토이스토리 에디션)
+ * - 2초 동안 스스로 3D 회전하는 주사위 롤링 연출
+ * - Web Audio API 기반 사실적인 주사위 딸깍거림 효과음 & 결과 발표 차임벨
+ * - 1인 1역할 랜덤 1:1 매칭, 맞교환, A4 인쇄, 구글 시트 연동
  */
 
 (function () {
@@ -31,9 +33,10 @@
   // --- 상태 관리 ---
   let students = [];
   let roles = [];
-  let assignments = []; // Array of { roleTitle, roleDesc, roleIcon, studentName }
-  let isShuffling = false;
+  let assignments = [];
+  let isRolling = false;
   let currentSwapRoleIndex = null;
+  let isSoundEnabled = true;
 
   // 로컬 스토리지 키
   const STORAGE_KEY_STUDENTS = 'school_role_students_v1';
@@ -41,6 +44,7 @@
   const STORAGE_KEY_ASSIGNMENTS = 'school_role_assignments_v1';
   const STORAGE_KEY_CLASS_NAME = 'school_role_class_name_v1';
   const STORAGE_KEY_GAS_URL = 'school_role_gas_url_v1';
+  const STORAGE_KEY_SOUND = 'school_role_sound_v1';
 
   // --- DOM 요소 참조 ---
   const inputClassTitle = document.getElementById('inputClassTitle');
@@ -58,6 +62,14 @@
   const btnCopyResult = document.getElementById('btnCopyResult');
   const btnToggleManage = document.getElementById('btnToggleManage');
   const btnPrint = document.getElementById('btnPrint');
+  const btnToggleSound = document.getElementById('btnToggleSound');
+  const soundIcon = document.getElementById('soundIcon');
+  const soundText = document.getElementById('soundText');
+
+  // 3D 주사위 오버레이
+  const diceOverlay = document.getElementById('diceOverlay');
+  const diceProgressFill = document.getElementById('diceProgressFill');
+  const diceTimerCounter = document.getElementById('diceTimerCounter');
 
   // 관리 패널 DOM
   const managePanel = document.getElementById('managePanel');
@@ -101,21 +113,167 @@
   // 토스트 메시지
   const toastMessage = document.getElementById('toastMessage');
 
+  // --- Web Audio API 사운드 생성기 ---
+  let audioCtx = null;
+
+  function getAudioContext() {
+    if (!audioCtx) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (AudioContextClass) {
+        audioCtx = new AudioContextClass();
+      }
+    }
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    return audioCtx;
+  }
+
+  // 주사위 딸깍거림 단일 클릭음 (나무/플라스틱 주사위 충돌음)
+  function playDiceClick(timeOffset = 0, pitchVariation = 1.0) {
+    if (!isSoundEnabled) return;
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime + timeOffset;
+
+    // 1. 노이즈 버스트 생성 (주사위 모서리 마찰음)
+    const bufferSize = ctx.sampleRate * 0.035; // 35ms
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const output = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      output[i] = Math.random() * 2 - 1;
+    }
+
+    const whiteNoise = ctx.createBufferSource();
+    whiteNoise.buffer = buffer;
+
+    // 밴드패스 필터로 딱딱한 주사위 텍스처 형성
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(1400 * pitchVariation, now);
+    filter.Q.setValueAtTime(3.5, now);
+
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.4, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
+
+    whiteNoise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+
+    whiteNoise.start(now);
+    whiteNoise.stop(now + 0.035);
+
+    // 2. 바닥 통통 튀는 저음 충돌음
+    const osc = ctx.createOscillator();
+    const oscGain = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(320 * pitchVariation, now);
+    osc.frequency.exponentialRampToValueAtTime(80, now + 0.04);
+
+    oscGain.gain.setValueAtTime(0.3, now);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+
+    osc.connect(oscGain);
+    oscGain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.045);
+  }
+
+  // 2초 동안 이어지는 실감나는 주사위 굴림 사운드 시퀀스
+  function playRollingDiceAudio(durationSeconds = 2.0) {
+    if (!isSoundEnabled) return;
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    // 2초 동안 18회 불규칙한 간격으로 딸깍거림 발생
+    let currentOffset = 0;
+    const totalHits = 20;
+
+    for (let i = 0; i < totalHits; i++) {
+      // 주사위가 굴러가며 서서히 튀는 간격이 변화하는 물리감
+      const interval = 0.06 + Math.random() * 0.07;
+      currentOffset += interval;
+      if (currentOffset >= durationSeconds - 0.1) break;
+
+      const pitch = 0.8 + Math.random() * 0.6;
+      playDiceClick(currentOffset, pitch);
+    }
+  }
+
+  // 2초 후 주사위가 멈추고 결과가 뜰 때 울리는 신나는 차임벨 효과음
+  function playCelebrationFanfare() {
+    if (!isSoundEnabled) return;
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    // C5, E5, G5, C6 하모니
+    const notes = [523.25, 659.25, 783.99, 1046.50];
+
+    notes.forEach((freq, idx) => {
+      const noteTime = now + (idx * 0.08);
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, noteTime);
+
+      gain.gain.setValueAtTime(0.22, noteTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, noteTime + 0.6);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(noteTime);
+      osc.stop(noteTime + 0.65);
+    });
+  }
+
+  // --- 사운드 토글 UI ---
+  function updateSoundUI() {
+    if (isSoundEnabled) {
+      soundIcon.textContent = '🔊';
+      soundText.textContent = '효과음 ON';
+      btnToggleSound.classList.remove('btn-muted');
+    } else {
+      soundIcon.textContent = '🔇';
+      soundText.textContent = '효과음 OFF';
+      btnToggleSound.classList.add('btn-muted');
+    }
+  }
+
+  function toggleSound() {
+    isSoundEnabled = !isSoundEnabled;
+    localStorage.setItem(STORAGE_KEY_SOUND, isSoundEnabled ? 'true' : 'false');
+    updateSoundUI();
+    if (isSoundEnabled) {
+      playDiceClick(0, 1.2);
+      showToast('🔊 효과음이 켜졌습니다.');
+    } else {
+      showToast('🔇 효과음이 꺼졌습니다.');
+    }
+  }
+
   // --- 초기화 함수 ---
   function init() {
     loadSavedData();
     bindEvents();
     syncUIWithData();
     updatePrintDate();
+    updateSoundUI();
   }
 
-  // --- 데이터 불러오기 및 기본값 세팅 ---
+  // --- 데이터 불러오기 ---
   function loadSavedData() {
     const savedStudents = localStorage.getItem(STORAGE_KEY_STUDENTS);
     const savedRoles = localStorage.getItem(STORAGE_KEY_ROLES);
     const savedAssignments = localStorage.getItem(STORAGE_KEY_ASSIGNMENTS);
     const savedClassName = localStorage.getItem(STORAGE_KEY_CLASS_NAME);
     const savedGasUrl = localStorage.getItem(STORAGE_KEY_GAS_URL);
+    const savedSound = localStorage.getItem(STORAGE_KEY_SOUND);
 
     students = savedStudents ? JSON.parse(savedStudents) : [...DEFAULT_STUDENTS];
     roles = savedRoles ? JSON.parse(savedRoles) : JSON.parse(JSON.stringify(DEFAULT_ROLES));
@@ -126,6 +284,10 @@
 
     if (savedGasUrl) {
       gasUrlInput.value = savedGasUrl;
+    }
+
+    if (savedSound !== null) {
+      isSoundEnabled = savedSound === 'true';
     }
 
     if (savedAssignments) {
@@ -157,11 +319,9 @@
     manageStudentCount.textContent = `${students.length}`;
     manageRoleCount.textContent = `${roles.length}`;
 
-    // 관리 패널 텍스트박스 동기화
     studentsTextarea.value = students.join(', ');
     rolesTextarea.value = roles.map(r => `${r.title}:${r.desc || ''}`).join('\n');
 
-    // 배정 상태 업데이트
     if (assignments && assignments.length > 0) {
       statStatusBadge.textContent = '배정 완료';
       statStatusBadge.className = 'stat-status assigned';
@@ -180,7 +340,6 @@
     }
   }
 
-  // --- 인쇄용 날짜 표기 갱신 ---
   function updatePrintDate() {
     const now = new Date();
     const year = now.getFullYear();
@@ -191,9 +350,11 @@
     printDateDisplay.textContent = `배정일자: ${year}년 ${month}월 ${date}일 (${day})`;
   }
 
-  // --- 역할 배정 핵심 로직 (랜덤 셔플) ---
-  function assignRoles() {
-    if (isShuffling) return;
+  // ==========================================================================
+  // [핵심 요구사항] 주사위가 2초 동안 스스로 회전하고 효과음 재생 후 배정 결과 표시
+  // ==========================================================================
+  function assignRolesWithDiceAnimation() {
+    if (isRolling) return;
 
     if (students.length === 0) {
       showToast('⚠️ 학생 명단이 비어있습니다. 학생을 등록해주세요.');
@@ -204,76 +365,108 @@
       return;
     }
 
-    isShuffling = true;
+    isRolling = true;
     btnAssign.disabled = true;
     if (btnReshuffle) btnReshuffle.disabled = true;
 
-    // 학생 복사본 생성 후 Fisher-Yates 셔플
+    // 1. 3D 주사위 오버레이 표시 & 프로그레스 초기화
+    diceOverlay.classList.remove('hidden');
+    diceProgressFill.style.width = '0%';
+    diceTimerCounter.textContent = '2.0초';
+
+    // 2. 주사위 효과음 재생 (2초 동안 실감나는 롤링 사운드)
+    playRollingDiceAudio(2.0);
+
+    // 3. 2초 동안 타이머 & 프로그레스 바 갱신 (60fps requestAnimationFrame)
+    const TOTAL_DURATION = 2000; // 정확히 2초
+    const startTime = performance.now();
+
+    function updateProgress(currentTime) {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / TOTAL_DURATION, 1);
+      const remainingSeconds = Math.max((TOTAL_DURATION - elapsed) / 1000, 0);
+
+      diceProgressFill.style.width = `${progress * 100}%`;
+      diceTimerCounter.textContent = `${remainingSeconds.toFixed(1)}초`;
+
+      if (elapsed < TOTAL_DURATION) {
+        requestAnimationFrame(updateProgress);
+      } else {
+        // 정확히 2초 도달! 결과 화면으로 전환
+        finishDiceRolling();
+      }
+    }
+
+    requestAnimationFrame(updateProgress);
+  }
+
+  // 2초 경과 후 주사위 모달 닫기 및 결과 화면 노출
+  function finishDiceRolling() {
+    // 1. 학생 명단 무작위 셔플 (Fisher-Yates)
     const shuffledStudents = [...students];
     for (let i = shuffledStudents.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffledStudents[i], shuffledStudents[j]] = [shuffledStudents[j], shuffledStudents[i]];
     }
 
-    // 카드 그리드 준비
-    emptyPlaceholder.classList.add('hidden');
-    cardsGrid.classList.remove('hidden');
+    // 2. 1:1 매칭 구성
+    const newAssignments = [];
+    const matchCount = Math.min(roles.length, shuffledStudents.length);
 
-    // 셔플 애니메이션 연출 (약 500ms 동안 롤링)
-    renderShufflingAnimation();
+    for (let i = 0; i < matchCount; i++) {
+      const role = roles[i];
+      const student = shuffledStudents[i];
+      newAssignments.push({
+        roleTitle: role.title,
+        roleDesc: role.desc || '',
+        roleIcon: role.icon || getRoleEmoji(role.title),
+        studentName: student
+      });
+    }
 
-    setTimeout(() => {
-      // 1:1 매칭 구성
-      const newAssignments = [];
-      const matchCount = Math.min(roles.length, shuffledStudents.length);
-
-      for (let i = 0; i < matchCount; i++) {
-        const role = roles[i];
-        const student = shuffledStudents[i];
+    // 학생 수가 역할 수보다 많은 경우 공동 역할 배정
+    if (shuffledStudents.length > roles.length) {
+      for (let i = roles.length; i < shuffledStudents.length; i++) {
+        const roleIndex = i % roles.length;
         newAssignments.push({
-          roleTitle: role.title,
-          roleDesc: role.desc || '',
-          roleIcon: role.icon || getRoleEmoji(role.title),
-          studentName: student
+          roleTitle: `${roles[roleIndex].title} (공동)`,
+          roleDesc: roles[roleIndex].desc || '',
+          roleIcon: roles[roleIndex].icon || '🤝',
+          studentName: shuffledStudents[i]
         });
       }
+    }
 
-      // 학생이 역할보다 많은 경우 추가 학생 처리
-      if (shuffledStudents.length > roles.length) {
-        for (let i = roles.length; i < shuffledStudents.length; i++) {
-          const roleIndex = i % roles.length;
-          newAssignments.push({
-            roleTitle: `${roles[roleIndex].title} (공동)`,
-            roleDesc: roles[roleIndex].desc || '',
-            roleIcon: roles[roleIndex].icon || '🤝',
-            studentName: shuffledStudents[i]
-          });
-        }
-      }
+    assignments = newAssignments;
+    saveData();
 
-      assignments = newAssignments;
-      saveData();
+    // 3. 주사위 오버레이 닫기
+    diceOverlay.classList.add('hidden');
 
-      // UI 렌더링
-      renderCards(true);
+    // 4. 배정 완료 효과음 (축하 팡파르 차임벨)
+    playCelebrationFanfare();
 
-      const now = new Date();
-      const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-      assignedTimestamp.textContent = `최근 배정 시각: ${timeStr}`;
+    // 5. 결과 화면 노출 및 카드 렌더링
+    emptyPlaceholder.classList.add('hidden');
+    cardsGrid.classList.remove('hidden');
+    renderCards(true);
 
-      statStatusBadge.textContent = '배정 완료';
-      statStatusBadge.className = 'stat-status assigned';
-      btnReshuffle.disabled = false;
-      btnCopyResult.disabled = false;
+    const now = new Date();
+    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+    assignedTimestamp.textContent = `배정 완료 시각: ${timeStr}`;
 
-      isShuffling = false;
-      btnAssign.disabled = false;
+    statStatusBadge.textContent = '배정 완료';
+    statStatusBadge.className = 'stat-status assigned';
+    btnReshuffle.disabled = false;
+    btnCopyResult.disabled = false;
 
-      showToast('🎉 학생 1인 1역할이 성공적으로 배정되었습니다!');
-    }, 600);
+    isRolling = false;
+    btnAssign.disabled = false;
+
+    showToast('🎉 2초 주사위 롤링 완료! 우리 반 1인 1역할이 배정되었습니다!');
   }
 
-  // 임의의 역할 이름에 어울리는 이모지 자동 매핑 헬퍼
+  // 역할 명칭에 어울리는 이모지 매핑
   function getRoleEmoji(title) {
     if (/칠판/.test(title)) return '🧹';
     if (/우유/.test(title)) return '🥛';
@@ -290,32 +483,6 @@
     if (/신발|신발장/.test(title)) return '👟';
     if (/체육|공|체육부/.test(title)) return '⚽';
     return '⭐';
-  }
-
-  // 셔플 도중 보여줄 임시 애니메이션
-  function renderShufflingAnimation() {
-    cardsGrid.innerHTML = '';
-    const count = Math.min(roles.length, students.length);
-    const fragment = document.createDocumentFragment();
-
-    for (let i = 0; i < count; i++) {
-      const card = document.createElement('div');
-      card.className = `role-card theme-${i % 6} shuffling`;
-      card.innerHTML = `
-        <div class="card-top">
-          <span class="card-num">${i + 1}</span>
-          <span class="card-icon">🎲</span>
-        </div>
-        <div class="card-role-title">${roles[i].title}</div>
-        <div class="student-badge-box">
-          <span class="student-label">배정 추첨 중...</span>
-          <span class="student-name">???</span>
-        </div>
-        <div class="card-desc">${roles[i].desc || '역할을 성실히 수행합니다.'}</div>
-      `;
-      fragment.appendChild(card);
-    }
-    cardsGrid.appendChild(fragment);
   }
 
   // --- 카드 그리드 렌더링 ---
@@ -353,9 +520,7 @@
         </div>
       `;
 
-      // 카드 클릭 시 학생 변경 모달 열기
-      card.addEventListener('click', (e) => {
-        // 이미 버튼을 눌렀다면 이벤트 버블링으로 처리
+      card.addEventListener('click', () => {
         openSwapModal(index);
       });
 
@@ -365,7 +530,7 @@
     cardsGrid.appendChild(fragment);
   }
 
-  // --- 학생 변경 (맞교환) 모달 열기 ---
+  // --- 학생 변경 (맞교환) 모달 ---
   function openSwapModal(index) {
     currentSwapRoleIndex = index;
     const targetAssignment = assignments[index];
@@ -373,12 +538,10 @@
 
     swapRoleTitleText.textContent = `[${targetAssignment.roleTitle}]`;
 
-    // 학생 선택 셀렉트박스 채우기
     swapStudentSelect.innerHTML = '';
     students.forEach(st => {
       const opt = document.createElement('option');
       opt.value = st;
-      // 현재 다른 역할을 맡고 있는지 표시
       const currentRole = assignments.find(a => a.studentName === st);
       if (st === targetAssignment.studentName) {
         opt.textContent = `${st} (현재 담당)`;
@@ -410,7 +573,6 @@
       return;
     }
 
-    // 만약 선택된 학생이 이미 다른 역할을 맡고 있다면 맞교환(Swap)
     const otherAssignment = assignments.find(a => a.studentName === selectedStudent);
     if (otherAssignment) {
       otherAssignment.studentName = previousStudent;
@@ -421,12 +583,13 @@
       showToast(`✅ [${targetAssignment.roleTitle}] 담당자가 ${selectedStudent} 학생으로 변경되었습니다.`);
     }
 
+    playDiceClick(0, 1.4);
     saveData();
     renderCards(false);
     closeSwapModal();
   }
 
-  // --- 결과 텍스트 복사 (알림장/메신저용) ---
+  // --- 결과 텍스트 복사 ---
   function copyResultsToClipboard() {
     if (!assignments || assignments.length === 0) {
       showToast('⚠️ 먼저 역할을 배정해주세요.');
@@ -437,18 +600,17 @@
     const now = new Date();
     const dateStr = `${now.getFullYear()}.${now.getMonth() + 1}.${now.getDate()}`;
 
-    let text = `🏫 [${currentClass} 1인 1역할 배정표] (${dateStr})\n`;
+    let text = `🚀 [${currentClass} 1인 1역할 배정표] (${dateStr})\n`;
     text += `------------------------------------\n`;
     assignments.forEach((item, idx) => {
       text += `${idx + 1}. ${item.studentName} : ${item.roleTitle} ${item.roleIcon} (${item.roleDesc})\n`;
     });
     text += `------------------------------------\n`;
-    text += `모두가 주인공이 되어 책임감 있게 역할을 실천해요! ✨`;
+    text += `무한한 공간 저 너머로! 모두 책임감 있게 역할을 실천해요! ✨`;
 
     navigator.clipboard.writeText(text).then(() => {
-      showToast('📋 배정 결과가 클립보드에 복사되었습니다! (알림장/메신저에 붙여넣기)');
+      showToast('📋 배정 결과가 클립보드에 복사되었습니다! (알림장에 붙여넣기)');
     }).catch(() => {
-      // 복사 권한 오류 대체
       const ta = document.createElement('textarea');
       ta.value = text;
       document.body.appendChild(ta);
@@ -462,14 +624,13 @@
   // --- A4 인쇄 실행 ---
   function triggerPrint() {
     if (!assignments || assignments.length === 0) {
-      // 배정되지 않은 상태라면 자동으로 먼저 배정할지 안내
       const confirmAutoAssign = confirm('아직 역할이 배정되지 않았습니다. 자동으로 1인 1역할을 배정하고 인쇄하시겠습니까?');
       if (confirmAutoAssign) {
-        assignRoles();
+        assignRolesWithDiceAnimation();
         setTimeout(() => {
           updatePrintDate();
           window.print();
-        }, 700);
+        }, 2200);
       }
       return;
     }
@@ -478,7 +639,7 @@
     window.print();
   }
 
-  // --- 관리 패널 적용 로직 ---
+  // --- 관리 패널 적용 ---
   function applyStudentsInput() {
     const raw = studentsTextarea.value.trim();
     if (!raw) {
@@ -553,7 +714,7 @@
     }
   }
 
-  // --- 구글 시트 연동 모달 & 통신 ---
+  // --- 구글 시트 모달 연동 ---
   function openSheetModal(targetAction) {
     sheetModal.classList.remove('hidden');
     sheetStatusMessage.classList.add('hidden');
@@ -578,7 +739,6 @@
     showToast('💾 스프레드시트 연동 URL이 저장되었습니다.');
   }
 
-  // 시트에서 데이터 불러오기 (doGet 호출)
   async function executeSheetLoad() {
     const gasUrl = gasUrlInput.value.trim();
     if (!gasUrl) {
@@ -592,20 +752,13 @@
     try {
       const response = await fetch(gasUrl, {
         method: 'GET',
-        headers: {
-          'Accept': 'application/json'
-        }
+        headers: { 'Accept': 'application/json' }
       });
 
-      if (!response.ok) {
-        throw new Error(`서버 응답 오류 (HTTP ${response.status})`);
-      }
-
+      if (!response.ok) throw new Error(`서버 응답 오류 (HTTP ${response.status})`);
       const data = await response.json();
 
-      if (data && data.students && data.students.length > 0) {
-        students = data.students;
-      }
+      if (data && data.students && data.students.length > 0) students = data.students;
       if (data && data.roles && data.roles.length > 0) {
         roles = data.roles.map(r => ({
           title: typeof r === 'string' ? r : r.title,
@@ -619,12 +772,10 @@
       setSheetStatus(`✅ 성공! 시트에서 학생 ${data.students?.length || 0}명, 역할 ${data.roles?.length || 0}개를 성공적으로 불러왔습니다!`, 'success');
       showToast('🔄 구글 시트 데이터가 성공적으로 반영되었습니다.');
     } catch (err) {
-      console.warn('Apps Script GET 요청 오류:', err);
       setSheetStatus(`❌ 시트 불러오기 실패: ${err.message}. (배포 권한이 '모든 사용자'로 설정되어 있는지 확인해주세요)`, 'error');
     }
   }
 
-  // 시트에 배정 결과 저장하기 (doPost 호출)
   async function executeSheetSave() {
     const gasUrl = gasUrlInput.value.trim();
     if (!gasUrl) {
@@ -651,20 +802,16 @@
     };
 
     try {
-      // Apps Script 웹 앱 POST 전송 (CORS 프리플라이트 회피를 위해 text/plain 허용 또는 no-cors 고려)
-      const response = await fetch(gasUrl, {
+      await fetch(gasUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8'
-        },
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(payload)
       });
 
       setSheetStatus(`✅ 배정 결과 ${payload.assignments.length}건이 구글 스프레드시트에 안전하게 저장되었습니다!`, 'success');
       showToast('💾 구글 시트에 배정 결과가 저장되었습니다.');
     } catch (err) {
-      console.warn('Apps Script POST 요청 실패:', err);
-      setSheetStatus(`❌ 시트 저장 실패: ${err.message}. Google Apps Script의 doPost() 함수와 배포 권한 설정을 확인하세요.`, 'error');
+      setSheetStatus(`❌ 시트 저장 실패: ${err.message}. Apps Script 설정을 확인하세요.`, 'error');
     }
   }
 
@@ -674,7 +821,6 @@
     sheetStatusMessage.classList.remove('hidden');
   }
 
-  // --- 토스트 메시지 표시 유틸 ---
   let toastTimer = null;
   function showToast(message) {
     if (toastTimer) clearTimeout(toastTimer);
@@ -688,20 +834,20 @@
 
   // --- 이벤트 바인딩 ---
   function bindEvents() {
-    // 메인 배정
-    btnAssign.addEventListener('click', assignRoles);
-    btnPlaceholderAssign.addEventListener('click', assignRoles);
-    btnReshuffle.addEventListener('click', assignRoles);
+    // 2초 3D 주사위 회전 & 효과음 실행
+    btnAssign.addEventListener('click', assignRolesWithDiceAnimation);
+    btnPlaceholderAssign.addEventListener('click', assignRolesWithDiceAnimation);
+    btnReshuffle.addEventListener('click', assignRolesWithDiceAnimation);
+
+    btnToggleSound.addEventListener('click', toggleSound);
     btnCopyResult.addEventListener('click', copyResultsToClipboard);
     btnPrint.addEventListener('click', triggerPrint);
 
-    // 학급명칭 변경 시 자동 저장
     inputClassTitle.addEventListener('input', () => {
       syncUIWithData();
       saveData();
     });
 
-    // 관리 패널 토글
     btnToggleManage.addEventListener('click', () => {
       managePanel.classList.toggle('hidden');
       if (!managePanel.classList.contains('hidden')) {
@@ -717,7 +863,6 @@
     btnApplyStudents.addEventListener('click', applyStudentsInput);
     btnApplyRoles.addEventListener('click', applyRolesInput);
 
-    // 간편 추가 버튼들
     btnQuickAddStudent.addEventListener('click', () => {
       const name = prompt('추가할 학생의 이름을 입력하세요:');
       if (name && name.trim()) {
@@ -743,7 +888,6 @@
       }
     });
 
-    // 구글 시트 모달 이벤트
     btnOpenSheetLoad.addEventListener('click', () => openSheetModal('load'));
     btnOpenSheetSave.addEventListener('click', () => openSheetModal('save'));
     btnCloseSheetModal.addEventListener('click', closeSheetModal);
@@ -751,7 +895,6 @@
     btnExecuteSheetLoad.addEventListener('click', executeSheetLoad);
     btnExecuteSheetSave.addEventListener('click', executeSheetSave);
 
-    // 모달 배경 클릭 시 닫기
     sheetModal.addEventListener('click', (e) => {
       if (e.target === sheetModal) closeSheetModal();
     });
@@ -759,12 +902,10 @@
       if (e.target === swapModal) closeSwapModal();
     });
 
-    // 맞교환 모달 이벤트
     btnCloseSwapModal.addEventListener('click', closeSwapModal);
     btnCancelSwap.addEventListener('click', closeSwapModal);
     btnConfirmSwap.addEventListener('click', applyStudentSwap);
 
-    // 코드 복사 버튼
     btnCopyGasCode.addEventListener('click', () => {
       const code = gasCodeSnippet.textContent;
       navigator.clipboard.writeText(code).then(() => {
@@ -772,7 +913,6 @@
       });
     });
 
-    // ESC 키로 모달 닫기
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         if (!sheetModal.classList.contains('hidden')) closeSheetModal();
@@ -781,7 +921,6 @@
     });
   }
 
-  // 실행 시작
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {

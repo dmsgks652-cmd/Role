@@ -3,43 +3,60 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>우리 반 1인 1역할 배정 도우미</title>
-  <meta name="description" content="초등학교 교실을 위한 귀엽고 산뜻한 1인 1역할 랜덤 배정 웹 애플리케이션 (A4 게시판 인쇄 및 구글 시트 연동 지원)">
+  <title>우리 반 1인 1역할 배정 도우미 - 토이스토리 에디션</title>
+  <meta name="description" content="토이스토리 감성의 귀엽고 산뜻한 우리 반 1인 1역할 랜덤 배정 웹 애플리케이션 (2초 3D 주사위 롤링 & 효과음, A4 인쇄 지원)">
   <meta property="og:title" content="우리 반 1인 1역할 배정 도우미">
-  <meta property="og:description" content="초등학교 교실을 위한 귀엽고 산뜻한 1인 1역할 랜덤 배정 웹 애플리케이션">
+  <meta property="og:description" content="토이스토리 테마의 신나는 학급 1인 1역할 랜덤 매칭 도우미">
   <meta property="og:type" content="website">
 
-  <!-- 웹 폰트 로드: 구글 Noto Sans KR & 가독성 높은 폰트 -->
+  <!-- 웹 폰트: Jua & Noto Sans KR -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;500;700;800;900&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="./style.css">
 </head>
-<body>
+<body class="toystory-theme">
+  <!-- 토이스토리 앤디의 방 구름 배경 레이어 -->
+  <div class="cloud-layer no-print" aria-hidden="true">
+    <div class="cloud cloud-1"></div>
+    <div class="cloud cloud-2"></div>
+    <div class="cloud cloud-3"></div>
+    <div class="cloud cloud-4"></div>
+    <div class="cloud cloud-5"></div>
+  </div>
+
   <!-- 상단 네비게이션 & 시트 연동 바 (인쇄 시 숨김) -->
   <header class="app-header no-print">
     <div class="header-container">
       <div class="logo-group">
-        <span class="logo-badge">🏫 초등 교실 필수템</span>
+        <div class="logo-badge-wrapper">
+          <span class="sheriff-star">⭐</span>
+          <span class="logo-badge">ANDY'S ROOM 학급 프로젝트</span>
+        </div>
         <h1 class="logo-title">
-          <span class="logo-emoji">🌱</span>
-          <span class="logo-text">우리 반 1인 1역할 배정 도우미</span>
+          <span class="title-toy">우리 반</span>
+          <span class="title-story">1인 1역할</span>
+          <span class="title-sub">배정 도우미</span>
         </h1>
-        <p class="logo-desc">모두가 주인공이 되는 행복하고 책임감 있는 우리 학급</p>
+        <p class="logo-desc">🚀 "무한한 공간, 저 너머로! 우리 모두가 주인공인 행복한 교실"</p>
       </div>
 
-      <!-- 상단 액션 바: 구글 시트 연동 & 인쇄 버튼 -->
+      <!-- 상단 액션 바: 구글 시트 연동 & 사운드 & 인쇄 버튼 -->
       <div class="header-actions">
-        <button id="btnOpenSheetLoad" class="btn btn-pastel-blue" title="구글 스프레드시트에서 학생 및 역할 데이터 가져오기">
+        <button id="btnToggleSound" class="btn btn-sound" title="효과음 켜기/끄기">
+          <span id="soundIcon">🔊</span>
+          <span id="soundText">효과음 ON</span>
+        </button>
+        <button id="btnOpenSheetLoad" class="btn btn-toystory-blue" title="구글 스프레드시트에서 학생 및 역할 데이터 가져오기">
           <span class="btn-icon">🔄</span>
           <span class="btn-text">시트 불러오기</span>
         </button>
-        <button id="btnOpenSheetSave" class="btn btn-pastel-green" title="현재 배정 결과를 구글 스프레드시트에 저장하기">
+        <button id="btnOpenSheetSave" class="btn btn-toystory-green" title="현재 배정 결과를 구글 스프레드시트에 저장하기">
           <span class="btn-icon">💾</span>
           <span class="btn-text">시트에 결과 저장</span>
         </button>
-        <button id="btnPrint" class="btn btn-pastel-purple" title="교실 게시판 부착용 A4 인쇄 미리보기">
+        <button id="btnPrint" class="btn btn-toystory-woody" title="교실 게시판 부착용 A4 인쇄 미리보기">
           <span class="btn-icon">🖨️</span>
           <span class="btn-text">A4 인쇄 / PDF</span>
         </button>
@@ -50,22 +67,22 @@
   <!-- 인쇄 전용 헤더 (화면에서는 숨김, @media print 에서만 표시) -->
   <div class="print-only print-header">
     <div class="print-meta-top">
-      <span class="print-school-tag">2026학년도 우리 반 약속</span>
+      <span class="print-school-tag">⭐ 2026학년도 우리 반 책임 약속 ⭐</span>
       <span id="printDateDisplay" class="print-date">배정일자: 2026년 3월 2일</span>
     </div>
     <h1 id="printClassTitle" class="print-title">🌟 우리 반 1인 1역할 배정표 🌟</h1>
-    <p class="print-motto">"작은 일도 성실하게! 서로 돕고 배려하며 함께 가꾸는 우리 교실"</p>
+    <p class="print-motto">"작은 일도 성실하게! 서로 돕고 배려하며 멋지게 가꾸어가는 우리 교실"</p>
   </div>
 
   <main class="main-content">
     <!-- 컨트롤 툴바 & 메인 배정 트리거 (인쇄 시 숨김) -->
     <section class="control-panel no-print">
-      <div class="control-card">
+      <div class="control-card toystory-box">
         <div class="control-top">
           <!-- 학급 정보 입력 칩 -->
           <div class="class-info-inputs">
             <label class="info-label" for="inputClassTitle">
-              <span class="label-icon">🏷️</span> 학급 명칭
+              <span class="label-icon">🤠</span> 학급 명칭
             </label>
             <input type="text" id="inputClassTitle" class="info-input" value="행복한 3학년 2반" placeholder="예: 무지개 4학년 1반">
           </div>
@@ -91,21 +108,23 @@
 
         <div class="control-action-bar">
           <!-- 핵심 [🎲 역할 배정하기] 버튼 -->
-          <button id="btnAssign" class="btn btn-primary-assign">
+          <button id="btnAssign" class="btn btn-toystory-launch">
             <span class="btn-dice">🎲</span>
-            <span class="btn-main-text">역할 배정하기</span>
-            <span class="btn-sub-tag">랜덤 1:1 매칭</span>
+            <div class="btn-text-block">
+              <span class="btn-main-text">역할 배정하기!</span>
+              <span class="btn-sub-tag">2초 3D 주사위 롤링 & 효과음</span>
+            </div>
           </button>
 
           <!-- 보조 액션 버튼들 -->
           <div class="secondary-actions">
-            <button id="btnReshuffle" class="btn btn-secondary" title="현재 학생들을 다시 무작위로 섞습니다" disabled>
+            <button id="btnReshuffle" class="btn btn-secondary-toystory" title="현재 학생들을 다시 무작위로 섞습니다" disabled>
               <span class="btn-icon">🔀</span> 다시 섞기
             </button>
-            <button id="btnCopyResult" class="btn btn-secondary" title="배정 결과를 텍스트로 복사하여 알림장에 붙여넣기" disabled>
+            <button id="btnCopyResult" class="btn btn-secondary-toystory" title="배정 결과를 텍스트로 복사하여 알림장에 붙여넣기" disabled>
               <span class="btn-icon">📋</span> 결과 텍스트 복사
             </button>
-            <button id="btnToggleManage" class="btn btn-secondary" title="학생 명단과 역할 목록 직접 편집하기">
+            <button id="btnToggleManage" class="btn btn-secondary-toystory" title="학생 명단과 역할 목록 직접 편집하기">
               <span class="btn-icon">✏️</span> 명단·역할 관리 (<span id="manageCountPreview">12</span>)
             </button>
           </div>
@@ -115,7 +134,7 @@
 
     <!-- 명단 및 역할 관리 패널 (접이식 아코디언, 인쇄 시 숨김) -->
     <section id="managePanel" class="manage-panel no-print hidden">
-      <div class="manage-card">
+      <div class="manage-card toystory-box">
         <div class="manage-header">
           <div class="manage-title-box">
             <h2 class="manage-title">📝 학생 명단 및 역할 목록 편집</h2>
@@ -169,26 +188,26 @@
       <div class="results-header-bar">
         <div class="results-title-group">
           <h2 class="results-title">
-            <span class="title-decor">🎉</span>
+            <span class="title-decor">🚀</span>
             <span id="displayClassTitle">우리 반 1인 1역할 배정 결과</span>
           </h2>
           <span id="assignedTimestamp" class="assigned-time"></span>
         </div>
         <div class="view-options no-print">
-          <span class="view-tip">💡 카드를 클릭하면 역할을 다른 친구와 맞교환할 수 있어요!</span>
+          <span class="view-tip">💡 카드를 클릭하면 다른 친구와 역할을 손쉽게 맞교환할 수 있어요!</span>
         </div>
       </div>
 
       <!-- 배정 전 초기 안내 화면 -->
-      <div id="emptyPlaceholder" class="empty-placeholder">
+      <div id="emptyPlaceholder" class="empty-placeholder toystory-box">
         <div class="placeholder-icon">🎲</div>
         <h3 class="placeholder-title">아직 역할이 배정되지 않았어요!</h3>
         <p class="placeholder-desc">
-          상단의 <strong>[🎲 역할 배정하기]</strong> 버튼을 누르면<br>
-          12명의 학생들에게 1인 1역할이 신나게 무작위 배정됩니다.
+          상단의 <strong>[🎲 역할 배정하기!]</strong> 버튼을 누르면<br>
+          주사위가 2초 동안 신나게 굴러가며 효과음과 함께 1:1 매칭됩니다!
         </p>
-        <button id="btnPlaceholderAssign" class="btn btn-pastel-coral">
-          지금 바로 배정 시작하기 ✨
+        <button id="btnPlaceholderAssign" class="btn btn-toystory-launch-sm">
+          🎲 주사위 굴려 배정 시작하기!
         </button>
       </div>
 
@@ -197,11 +216,69 @@
     </section>
   </main>
 
+  <!-- 2초 동안 스스로 회전하는 3D 주사위 롤링 오버레이 (사운드 연동) -->
+  <div id="diceOverlay" class="dice-overlay hidden" role="dialog" aria-modal="true" aria-label="주사위 굴리는 중">
+    <div class="dice-modal-content">
+      <div class="dice-room-tag">⭐ TOY STORY 1인 1역할 ⭐</div>
+      <div class="dice-scene">
+        <div class="dice-cube" id="diceCube">
+          <!-- 1면 (앞면: 대형 레드 닷 1개) -->
+          <div class="dice-face face-1">
+            <span class="dot dot-red"></span>
+          </div>
+          <!-- 6면 (뒷면: 6개 점, 1의 반대편) -->
+          <div class="dice-face face-6">
+            <div class="dot-col"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+            <div class="dot-col"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+          </div>
+          <!-- 2면 (우측면: 2개 점) -->
+          <div class="dice-face face-2">
+            <span class="dot dot-tl"></span>
+            <span class="dot dot-br"></span>
+          </div>
+          <!-- 5면 (좌측면: 5개 점, 2의 반대편) -->
+          <div class="dice-face face-5">
+            <div class="dot-col"><span class="dot"></span><span class="dot"></span></div>
+            <div class="dot-center-wrap"><span class="dot"></span></div>
+            <div class="dot-col"><span class="dot"></span><span class="dot"></span></div>
+          </div>
+          <!-- 3면 (윗면: 3개 점) -->
+          <div class="dice-face face-3">
+            <span class="dot dot-tl"></span>
+            <span class="dot dot-mid"></span>
+            <span class="dot dot-br"></span>
+          </div>
+          <!-- 4면 (아랫면: 4개 점, 3의 반대편) -->
+          <div class="dice-face face-4">
+            <div class="dot-col"><span class="dot"></span><span class="dot"></span></div>
+            <div class="dot-col"><span class="dot"></span><span class="dot"></span></div>
+          </div>
+        </div>
+        <div class="dice-shadow"></div>
+      </div>
+
+      <div class="dice-status-box">
+        <h3 class="dice-rolling-title">
+          <span class="title-sparkle">✨</span>
+          <span>두구두구... 주사위 굴리는 중!</span>
+          <span class="title-sparkle">✨</span>
+        </h3>
+        <p class="dice-rolling-subtitle">2초 뒤 우리 반 1인 1역할이 멋지게 공개됩니다!</p>
+        
+        <!-- 2초 타이머 진행 바 -->
+        <div class="dice-progress-track">
+          <div id="diceProgressFill" class="dice-progress-fill"></div>
+        </div>
+        <div class="dice-timer-counter" id="diceTimerCounter">2.0초</div>
+      </div>
+    </div>
+  </div>
+
   <!-- 인쇄 전용 하단 서명란 (게시판 부착용) -->
   <footer class="print-only print-footer">
     <div class="print-promise-box">
-      <p class="print-promise-title">🤙 우리 반의 약속</p>
-      <p class="print-promise-text">나에게 주어진 역할에 책임감을 갖고 즐겁게 실천하겠습니다. 친구가 도움이 필요할 땐 서로 돕겠습니다!</p>
+      <p class="print-promise-title">🤙 우리 반의 책임 약속</p>
+      <p class="print-promise-text">나에게 주어진 역할에 자부심을 갖고 즐겁게 실천하겠습니다. 친구가 도움이 필요할 땐 언제나 돕겠습니다!</p>
     </div>
     <div class="print-signatures">
       <div class="sig-box">
@@ -217,7 +294,7 @@
 
   <!-- 구글 시트 연동 모달 (Apps Script Connector) -->
   <div id="sheetModal" class="modal-overlay hidden" role="dialog" aria-modal="true">
-    <div class="modal-window">
+    <div class="modal-window toystory-box">
       <div class="modal-head">
         <div class="modal-title-group">
           <span class="modal-icon">📊</span>
@@ -247,10 +324,10 @@
 
         <!-- 모달 내부 즉시 실행 버튼들 -->
         <div class="modal-action-row">
-          <button id="btnExecuteSheetLoad" class="btn btn-pastel-blue">
+          <button id="btnExecuteSheetLoad" class="btn btn-toystory-blue">
             <span>🔄</span> 시트에서 학생·역할 불러오기
           </button>
-          <button id="btnExecuteSheetSave" class="btn btn-pastel-green">
+          <button id="btnExecuteSheetSave" class="btn btn-toystory-green">
             <span>💾</span> 현재 배정 결과를 시트에 저장
           </button>
         </div>
@@ -315,7 +392,7 @@ function doPost(e) {
 
   <!-- 역할 맞교환/수정 모달 -->
   <div id="swapModal" class="modal-overlay hidden" role="dialog" aria-modal="true">
-    <div class="modal-window modal-sm">
+    <div class="modal-window modal-sm toystory-box">
       <div class="modal-head">
         <h3 class="modal-title">🔀 역할 담당 학생 변경</h3>
         <button id="btnCloseSwapModal" class="btn-close-modal">✕</button>

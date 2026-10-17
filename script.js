@@ -616,17 +616,25 @@
   }
 
   function normalizeRole(role) {
-    if (typeof role === 'string') {
-      const title = role.trim();
-      return title && title !== 'undefined' ? { title, desc: '', icon: getRoleEmoji(title) } : null;
+    const valid = v => (typeof v === 'string' || typeof v === 'number') &&
+      String(v).trim() && !['undefined', 'null', '[object Object]', 'NaN'].includes(String(v).trim());
+    if (valid(role)) {
+      const title = String(role).trim();
+      return { title, desc: '', icon: getRoleEmoji(title) };
     }
     if (!role || typeof role !== 'object') return null;
-    const title = [role.title, role.roleTitle, role.role, role['역할'], role['역할명'], role['이름'], role.name]
-      .find(v => typeof v === 'string' && v.trim() && !['undefined', 'null', '[object Object]'].includes(v.trim()));
-    if (!title) return null;
-    const desc = [role.desc, role.description, role.roleDesc, role['업무'], role['설명']]
-      .find(v => typeof v === 'string' && !['undefined', 'null'].includes(v.trim())) || '';
-    return { title: title.trim(), desc, icon: role.icon || getRoleEmoji(title) };
+    // 배열 형태 [역할명, 역할설명] 및 [학생이름, 역할명, 역할설명] 지원
+    if (Array.isArray(role)) {
+      const offset = role.length >= 3 ? 1 : 0;
+      const title = role[offset];
+      if (!valid(title)) return null;
+      return { title: String(title).trim(), desc: valid(role[offset + 1]) ? String(role[offset + 1]) : '', icon: getRoleEmoji(String(title)) };
+    }
+    const title = [role.title, role.roleTitle, role.roleName, role.role_name, role.role, role.task, role['역할'], role['역할명'], role['역할이름'], role['역할 이름'], role['이름'], role.name, role[1]]
+      .find(valid);
+    if (!valid(title)) return null;
+    const desc = [role.desc, role.description, role.roleDesc, role.roleDescription, role['업무'], role['역할설명'], role['역할 설명'], role['설명'], role[2]].find(valid) || '';
+    return { title: String(title).trim(), desc: String(desc), icon: valid(role.icon) ? role.icon : getRoleEmoji(String(title)) };
   }
 
   // --- 데이터 불러오기 ---

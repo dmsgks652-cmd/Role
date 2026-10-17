@@ -600,7 +600,7 @@
   function normalizeStudentName(student) {
     if (typeof student === 'string' || typeof student === 'number') {
       const name = String(student).trim();
-      return name === '[object Object]' ? '' : name;
+      return (!name || ['[object Object]', 'undefined', 'null', 'NaN'].includes(name)) ? '' : name;
     }
     if (student && typeof student === 'object') {
       const fields = ['name', 'studentName', 'student', '학생이름', '이름', 'value', '성명'];
@@ -608,7 +608,7 @@
         const value = student[field];
         if (typeof value === 'string' || typeof value === 'number') {
           const name = String(value).trim();
-          if (name && name !== '[object Object]') return name;
+          if (name && !['[object Object]', 'undefined', 'null', 'NaN'].includes(name)) return name;
         }
       }
     }
@@ -657,7 +657,8 @@
 
     if (savedAssignments) {
       try {
-        assignments = JSON.parse(savedAssignments);
+        const parsedAssignments = JSON.parse(savedAssignments);
+        assignments = Array.isArray(parsedAssignments) ? parsedAssignments.filter(a => a && typeof a === 'object').map(a => ({ ...a, studentName: normalizeStudentName(a.studentName ?? a.student ?? a.name) })).filter(a => a.studentName) : [];
       } catch (e) {
         assignments = [];
       }
@@ -1097,7 +1098,7 @@
       const input = document.createElement('input');
       input.type = 'text';
       input.className = 'edit-input-student';
-      input.value = name;
+      input.value = normalizeStudentName(name);
       input.placeholder = `학생 ${index + 1} 이름`;
       input.addEventListener('input', (e) => {
         draftStudents[index] = e.target.value;

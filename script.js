@@ -615,6 +615,20 @@
     return '';
   }
 
+  function normalizeRole(role) {
+    if (typeof role === 'string') {
+      const title = role.trim();
+      return title && title !== 'undefined' ? { title, desc: '', icon: getRoleEmoji(title) } : null;
+    }
+    if (!role || typeof role !== 'object') return null;
+    const title = [role.title, role.roleTitle, role.role, role['역할'], role['역할명'], role['이름'], role.name]
+      .find(v => typeof v === 'string' && v.trim() && !['undefined', 'null', '[object Object]'].includes(v.trim()));
+    if (!title) return null;
+    const desc = [role.desc, role.description, role.roleDesc, role['업무'], role['설명']]
+      .find(v => typeof v === 'string' && !['undefined', 'null'].includes(v.trim())) || '';
+    return { title: title.trim(), desc, icon: role.icon || getRoleEmoji(title) };
+  }
+
   // --- 데이터 불러오기 ---
   function loadSavedData() {
     const savedStudents = localStorage.getItem(STORAGE_KEY_STUDENTS);
@@ -633,7 +647,12 @@
     } catch (e) {
       students = [...DEFAULT_STUDENTS];
     }
-    roles = savedRoles ? JSON.parse(savedRoles) : JSON.parse(JSON.stringify(DEFAULT_ROLES));
+    try {
+      const parsedRoles = savedRoles ? JSON.parse(savedRoles) : DEFAULT_ROLES;
+      roles = (Array.isArray(parsedRoles) ? parsedRoles : DEFAULT_ROLES).map(normalizeRole).filter(Boolean);
+    } catch (e) {
+      roles = JSON.parse(JSON.stringify(DEFAULT_ROLES));
+    }
 
     if (savedClassName) {
       inputClassTitle.value = savedClassName;
@@ -878,17 +897,17 @@
       card.innerHTML = `
         <div class="card-top">
           <span class="card-num">${index + 1}</span>
-          <span class="card-icon">${item.roleIcon}</span>
+          <span class="card-icon">${item.roleIcon || '🤝'}</span>
           <button class="card-swap-btn no-print" data-index="${index}" title="담당 학생 바꾸기">
             학생 변경
           </button>
         </div>
         <div class="card-role-title">
-          <span>${item.roleTitle}</span>
+          <span>${item.roleTitle || '역할 미지정'}</span>
         </div>
         <div class="student-badge-box">
           <span class="student-label">담당 학생</span>
-          <span class="student-name">${item.studentName}</span>
+          <span class="student-name">${normalizeStudentName(item.studentName) || '담당 학생 미지정'}</span>
         </div>
         <div class="card-desc">
           ${item.roleDesc || '우리 반을 위해 주어진 역할을 책임감 있게 완수합니다.'}
@@ -1344,12 +1363,11 @@
         // 기존 배정 결과에는 이전 학생 이름이 남을 수 있으므로 명단 변경 시 초기화
         if (assignments.length && assignments.some(a => !students.includes(a.studentName))) assignments = [];
       }
-      if (data && data.roles && data.roles.length > 0) {
-        roles = data.roles.map(r => ({
-          title: typeof r === 'string' ? r : r.title,
-          desc: typeof r === 'string' ? '' : (r.desc || ''),
-          icon: getRoleEmoji(typeof r === 'string' ? r : r.title)
-        }));
+      if (data && Array.isArray(data.roles) && data.roles.length > 0) {
+        const normalizedRoles = data.roles.map(normalizeRole).filter(Boolean);
+        if (!normalizedRoles.length) throw new Error('시트에서 역할명을 찾을 수 없습니다. 역할 열 제목을 확인해주세요');
+        roles = normalizedRoles;
+        assignments = [];
       }
 
       saveData();

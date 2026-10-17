@@ -596,6 +596,25 @@
     updateBgmUI();
   }
 
+  // 시트/브라우저 저장 데이터의 다양한 학생 형식을 이름 문자열로 통일
+  function normalizeStudentName(student) {
+    if (typeof student === 'string' || typeof student === 'number') {
+      const name = String(student).trim();
+      return name === '[object Object]' ? '' : name;
+    }
+    if (student && typeof student === 'object') {
+      const fields = ['name', 'studentName', 'student', '학생이름', '이름', 'value', '성명'];
+      for (const field of fields) {
+        const value = student[field];
+        if (typeof value === 'string' || typeof value === 'number') {
+          const name = String(value).trim();
+          if (name && name !== '[object Object]') return name;
+        }
+      }
+    }
+    return '';
+  }
+
   // --- 데이터 불러오기 ---
   function loadSavedData() {
     const savedStudents = localStorage.getItem(STORAGE_KEY_STUDENTS);
@@ -607,7 +626,13 @@
     const savedBgm = localStorage.getItem(STORAGE_KEY_BGM);
     const savedBgmVol = localStorage.getItem(STORAGE_KEY_BGM_VOL);
 
-    students = savedStudents ? JSON.parse(savedStudents) : [...DEFAULT_STUDENTS];
+    try {
+      const parsedStudents = savedStudents ? JSON.parse(savedStudents) : DEFAULT_STUDENTS;
+      students = (Array.isArray(parsedStudents) ? parsedStudents : DEFAULT_STUDENTS)
+        .map(normalizeStudentName).filter(Boolean);
+    } catch (e) {
+      students = [...DEFAULT_STUDENTS];
+    }
     roles = savedRoles ? JSON.parse(savedRoles) : JSON.parse(JSON.stringify(DEFAULT_ROLES));
 
     if (savedClassName) {
@@ -1312,14 +1337,7 @@
       const data = await response.json();
 
       if (data && Array.isArray(data.students) && data.students.length > 0) {
-        const normalizedStudents = data.students.map(student => {
-          if (typeof student === 'string' || typeof student === 'number') return String(student).trim();
-          if (student && typeof student === 'object') {
-            const name = student.name ?? student.studentName ?? student.student ?? student['학생이름'] ?? student['이름'] ?? student.value;
-            return (typeof name === 'string' || typeof name === 'number') ? String(name).trim() : '';
-          }
-          return '';
-        }).filter(Boolean);
+        const normalizedStudents = data.students.map(normalizeStudentName).filter(Boolean);
         if (!normalizedStudents.length) throw new Error('학생 이름을 찾을 수 없습니다. 시트의 이름 열과 Apps Script 응답을 확인해주세요');
         students = normalizedStudents;
         // 기존 배정 결과에는 이전 학생 이름이 남을 수 있으므로 명단 변경 시 초기화

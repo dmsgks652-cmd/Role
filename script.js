@@ -38,6 +38,13 @@
   let currentSwapRoleIndex = null;
   let isSoundEnabled = true;
 
+  // BGM (You've Got a Friend in Me) 상태 관리
+  let isBgmPlaying = true;
+  let bgmVolume = 0.25;
+  let bgmMasterGain = null;
+  let bgmLoopTimer = null;
+  let isBgmStarted = false;
+
   // 로컬 스토리지 키
   const STORAGE_KEY_STUDENTS = 'school_role_students_v1';
   const STORAGE_KEY_ROLES = 'school_role_roles_v1';
@@ -45,6 +52,8 @@
   const STORAGE_KEY_CLASS_NAME = 'school_role_class_name_v1';
   const STORAGE_KEY_GAS_URL = 'school_role_gas_url_v1';
   const STORAGE_KEY_SOUND = 'school_role_sound_v1';
+  const STORAGE_KEY_BGM = 'school_role_bgm_v1';
+  const STORAGE_KEY_BGM_VOL = 'school_role_bgm_vol_v1';
 
   // --- DOM 요소 참조 ---
   const inputClassTitle = document.getElementById('inputClassTitle');
@@ -60,29 +69,50 @@
   const btnPlaceholderAssign = document.getElementById('btnPlaceholderAssign');
   const btnReshuffle = document.getElementById('btnReshuffle');
   const btnCopyResult = document.getElementById('btnCopyResult');
-  const btnToggleManage = document.getElementById('btnToggleManage');
   const btnPrint = document.getElementById('btnPrint');
   const btnToggleSound = document.getElementById('btnToggleSound');
   const soundIcon = document.getElementById('soundIcon');
   const soundText = document.getElementById('soundText');
+
+  // BGM 플레이어 DOM
+  const btnToggleBgm = document.getElementById('btnToggleBgm');
+  const bgmIcon = document.getElementById('bgmIcon');
+  const bgmText = document.getElementById('bgmText');
+  const vinylRecord = document.getElementById('vinylRecord');
+  const btnPlayPauseBgm = document.getElementById('btnPlayPauseBgm');
+  const bgmActionIcon = document.getElementById('bgmActionIcon');
+  const bgmActionLabel = document.getElementById('bgmActionLabel');
+  const bgmVolumeSlider = document.getElementById('bgmVolumeSlider');
 
   // 3D 주사위 오버레이
   const diceOverlay = document.getElementById('diceOverlay');
   const diceProgressFill = document.getElementById('diceProgressFill');
   const diceTimerCounter = document.getElementById('diceTimerCounter');
 
-  // 관리 패널 DOM
-  const managePanel = document.getElementById('managePanel');
-  const btnCloseManage = document.getElementById('btnCloseManage');
-  const btnResetDefault = document.getElementById('btnResetDefault');
-  const studentsTextarea = document.getElementById('studentsTextarea');
-  const rolesTextarea = document.getElementById('rolesTextarea');
-  const btnApplyStudents = document.getElementById('btnApplyStudents');
-  const btnApplyRoles = document.getElementById('btnApplyRoles');
-  const btnQuickAddStudent = document.getElementById('btnQuickAddStudent');
-  const btnQuickAddRole = document.getElementById('btnQuickAddRole');
-  const manageStudentCount = document.getElementById('manageStudentCount');
-  const manageRoleCount = document.getElementById('manageRoleCount');
+  // 학생 명단 & 역할·업무 내용 수정 모달 DOM
+  const btnOpenEditModal = document.getElementById('btnOpenEditModal');
+  const dataEditModal = document.getElementById('dataEditModal');
+  const btnCloseEditModal = document.getElementById('btnCloseEditModal');
+  const btnCancelEditModal = document.getElementById('btnCancelEditModal');
+  const btnSaveAndApplyModal = document.getElementById('btnSaveAndApplyModal');
+  const btnResetToDefaultsModal = document.getElementById('btnResetToDefaultsModal');
+
+  const tabBtnStudents = document.getElementById('tabBtnStudents');
+  const tabBtnRoles = document.getElementById('tabBtnRoles');
+  const editTabStudentsContent = document.getElementById('editTabStudentsContent');
+  const editTabRolesContent = document.getElementById('editTabRolesContent');
+  const editModalStudentCount = document.getElementById('editModalStudentCount');
+  const editModalRoleCount = document.getElementById('editModalRoleCount');
+
+  const studentRowsContainer = document.getElementById('studentRowsContainer');
+  const btnAddStudentRow = document.getElementById('btnAddStudentRow');
+  const roleRowsContainer = document.getElementById('roleRowsContainer');
+  const btnAddRoleRow = document.getElementById('btnAddRoleRow');
+
+  // 모달 임시 작업 버퍼
+  let draftStudents = [];
+  let draftRoles = [];
+  let currentEditTab = 'students';
 
   // 그리드 & 상태
   const cardsGrid = document.getElementById('cardsGrid');
@@ -113,8 +143,111 @@
   // 토스트 메시지
   const toastMessage = document.getElementById('toastMessage');
 
-  // --- Web Audio API 사운드 생성기 ---
+  // --- Web Audio API 사운드 및 토이스토리 OST BGM 생성기 ---
   let audioCtx = null;
+
+  // 음계 주파수 정의 (Randy Newman Ragtime Piano & Bass)
+  const NOTE_FREQ = {
+    'C2': 65.41, 'D2': 73.42, 'E2': 82.41, 'F2': 87.31, 'F#2': 92.50, 'G2': 98.00, 'Ab2': 103.83, 'A2': 110.00, 'Bb2': 116.54, 'B2': 123.47,
+    'C3': 130.81, 'C#3': 138.59, 'D3': 146.83, 'Eb3': 155.56, 'E3': 164.81, 'F3': 174.61, 'F#3': 185.00, 'G3': 196.00, 'Ab3': 207.65, 'A3': 220.00, 'Bb3': 233.08, 'B3': 246.94,
+    'C4': 261.63, 'C#4': 277.18, 'D4': 293.66, 'Eb4': 311.13, 'E4': 329.63, 'F4': 349.23, 'F#4': 369.99, 'G4': 392.00, 'Ab4': 415.30, 'A4': 440.00, 'Bb4': 466.16, 'B4': 493.88,
+    'C5': 523.25, 'C#5': 554.37, 'D5': 587.33, 'Eb5': 622.25, 'E5': 659.25, 'F5': 698.46, 'F#5': 739.99, 'G5': 783.99, 'Ab5': 830.61, 'A5': 880.00, 'Bb5': 932.33, 'B5': 987.77,
+    'C6': 1046.50
+  };
+
+  // 토이스토리 OST "You've Got a Friend in Me" 풀 시퀀스 악보 데이터 (스윙 랙타임)
+  const THEME_SCORE = [
+    // --- Intro 랙타임 인트로 리프 ---
+    { m: ['G4', 0.5], b: 'C3', c: ['E4', 'G4', 'C5'], t: 0 },
+    { m: ['A4', 0.5], t: 0.5 },
+    { m: ['C5', 0.6], b: 'G2', c: ['E4', 'G4', 'C5'], t: 1.0 },
+    { m: ['D5', 0.4], t: 1.6 },
+    { m: ['Eb5', 0.3], t: 2.0 },
+    { m: ['E5', 0.8], b: 'C3', c: ['E4', 'G4', 'C5'], t: 2.3 },
+    { m: ['C5', 0.6], b: 'E3', c: ['D4', 'G#4', 'B4'], t: 3.2 },
+    { m: ['A4', 0.5], t: 3.8 },
+    { m: ['G4', 0.6], b: 'A2', c: ['C4', 'E4', 'A4'], t: 4.3 },
+    { m: ['E4', 0.6], t: 4.9 },
+    { m: ['G4', 0.5], b: 'Ab2', c: ['C4', 'Eb4', 'Gb4'], t: 5.5 },
+    { m: ['A4', 0.5], t: 6.0 },
+    { m: ['Ab4', 0.9], b: 'G2', c: ['C4', 'E4', 'G4'], t: 6.5 },
+    { m: ['G4', 0.6], b: 'G2', c: ['B3', 'D4', 'F4'], t: 7.4 },
+    { m: ['C5', 1.0], b: 'C3', c: ['C4', 'E4', 'G4'], t: 8.0 },
+
+    // --- Verse 1: "You've got a friend in me" ---
+    { m: ['C4', 0.4], b: 'C3', c: ['E4', 'G4'], t: 9.2 },
+    { m: ['E4', 0.4], t: 9.6 },
+    { m: ['G4', 0.4], b: 'G2', c: ['E4', 'C5'], t: 10.0 },
+    { m: ['A4', 0.4], t: 10.4 },
+    { m: ['C5', 1.2], b: 'C3', c: ['E4', 'G4', 'C5'], t: 10.8 },
+    { m: ['A4', 0.4], t: 12.0 },
+    { m: ['C5', 0.8], b: 'E3', c: ['D4', 'G#4', 'B4'], t: 12.4 },
+    { m: ['C5', 0.5], b: 'A2', c: ['C4', 'E4', 'A4'], t: 13.2 },
+    { m: ['A4', 0.7], t: 13.7 },
+
+    // --- "You've got a friend in me" ---
+    { m: ['C4', 0.4], b: 'Ab2', c: ['C4', 'Eb4', 'Ab4'], t: 14.5 },
+    { m: ['E4', 0.4], t: 14.9 },
+    { m: ['G4', 0.4], b: 'G2', c: ['C4', 'E4', 'G4'], t: 15.3 },
+    { m: ['A4', 0.4], t: 15.7 },
+    { m: ['C5', 1.2], b: 'C3', c: ['E4', 'G4', 'C5'], t: 16.1 },
+    { m: ['A4', 0.8], t: 17.3 },
+    { m: ['G4', 0.5], b: 'G2', c: ['B3', 'D4', 'F4'], t: 18.1 },
+    { m: ['E4', 0.5], t: 18.6 },
+    { m: ['D4', 0.9], b: 'C3', c: ['C4', 'E4', 'G4'], t: 19.1 },
+
+    // --- "When the road looks rough ahead" ---
+    { m: ['E5', 0.5], b: 'F2', c: ['A3', 'C4', 'F4'], t: 20.2 },
+    { m: ['E5', 0.4], t: 20.7 },
+    { m: ['D5', 0.4], b: 'F#2', c: ['A3', 'C4', 'Eb4'], t: 21.1 },
+    { m: ['C5', 0.4], t: 21.5 },
+    { m: ['D5', 0.5], b: 'G2', c: ['C4', 'E4', 'G4'], t: 21.9 },
+    { m: ['E5', 0.5], t: 22.4 },
+    { m: ['C5', 0.9], b: 'E2', c: ['D4', 'G#4', 'B4'], t: 22.9 },
+
+    // --- "And you're miles and miles from your nice warm bed" ---
+    { m: ['E5', 0.5], b: 'A2', c: ['C4', 'E4', 'A4'], t: 23.8 },
+    { m: ['E5', 0.4], t: 24.3 },
+    { m: ['D5', 0.4], b: 'G2', c: ['B3', 'D4', 'F4'], t: 24.7 },
+    { m: ['C5', 0.4], t: 25.1 },
+    { m: ['D5', 0.4], b: 'F2', c: ['A3', 'C4', 'F4'], t: 25.5 },
+    { m: ['E5', 0.4], t: 25.9 },
+    { m: ['D5', 0.4], b: 'E2', c: ['G#3', 'B3', 'E4'], t: 26.3 },
+    { m: ['C5', 0.4], t: 26.7 },
+    { m: ['A4', 0.9], b: 'A2', c: ['C4', 'E4', 'A4'], t: 27.1 },
+
+    // --- "You just remember what your old pal said" ---
+    { m: ['C5', 0.4], b: 'D3', c: ['C4', 'F#4', 'A4'], t: 28.1 },
+    { m: ['C5', 0.4], t: 28.5 },
+    { m: ['A4', 0.35], b: 'F#2', c: ['C4', 'D4', 'A4'], t: 28.9 },
+    { m: ['C5', 0.35], t: 29.25 },
+    { m: ['D5', 0.35], b: 'G2', c: ['B3', 'D4', 'G4'], t: 29.6 },
+    { m: ['Eb5', 0.3], t: 29.95 },
+    { m: ['E5', 0.7], b: 'B2', c: ['D4', 'F4', 'G4'], t: 30.25 },
+    { m: ['C5', 0.6], t: 30.95 },
+
+    // --- "Boy, you've got a friend in me" ---
+    { m: ['A4', 0.45], b: 'C3', c: ['E4', 'G4', 'C5'], t: 31.6 },
+    { m: ['G4', 0.45], t: 32.05 },
+    { m: ['E4', 0.35], b: 'A2', c: ['C#4', 'G4', 'A4'], t: 32.5 },
+    { m: ['G4', 0.35], t: 32.85 },
+    { m: ['A4', 0.55], b: 'D3', c: ['C4', 'F#4', 'A4'], t: 33.2 },
+    { m: ['C5', 1.4], b: 'G2', c: ['B3', 'D4', 'F4'], t: 33.75 },
+
+    // --- "Yeah, you've got a friend in me" ---
+    { m: ['A4', 0.45], b: 'C3', c: ['E4', 'G4', 'C5'], t: 35.3 },
+    { m: ['G4', 0.45], t: 35.75 },
+    { m: ['E4', 0.45], b: 'B2', c: ['D4', 'G#4', 'B4'], t: 36.2 },
+    { m: ['D4', 0.45], b: 'A2', c: ['C4', 'E4', 'A4'], t: 36.65 },
+    { m: ['C4', 1.9], b: 'Ab2', c: ['C4', 'Eb4', 'Ab4'], t: 37.1 },
+
+    // --- Turnaround 마무리 ---
+    { m: ['G4', 0.35], b: 'G2', c: ['B3', 'D4', 'F4'], t: 39.2 },
+    { m: ['A4', 0.35], t: 39.55 },
+    { m: ['C5', 0.35], b: 'C3', c: ['C4', 'E4', 'G4'], t: 39.9 },
+    { m: ['D5', 0.35], t: 40.25 },
+    { m: ['C5', 1.2], b: 'C3', c: ['C4', 'E4', 'G4'], t: 40.6 }
+  ];
 
   function getAudioContext() {
     if (!audioCtx) {
@@ -123,13 +256,218 @@
         audioCtx = new AudioContextClass();
       }
     }
-    if (audioCtx && audioCtx.state === 'suspended') {
-      audioCtx.resume();
+    if (audioCtx) {
+      if (!bgmMasterGain) {
+        bgmMasterGain = audioCtx.createGain();
+        bgmMasterGain.gain.setValueAtTime(isBgmPlaying ? bgmVolume : 0, audioCtx.currentTime);
+        bgmMasterGain.connect(audioCtx.destination);
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
     }
     return audioCtx;
   }
 
-  // 주사위 딸깍거림 단일 클릭음 (나무/플라스틱 주사위 충돌음)
+  // --- 토이스토리 OST 악기 합성기 ---
+  // 1. 따뜻한 랙타임 어쿠스틱 피아노 멜로디
+  function playMelodyNote(ctx, freq, startTime, duration) {
+    if (!freq) return;
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(freq, startTime);
+
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(freq, startTime);
+
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(2400, startTime);
+
+    gain.gain.setValueAtTime(0.001, startTime);
+    gain.gain.linearRampToValueAtTime(0.22, startTime + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration * 1.15);
+
+    osc1.connect(filter);
+    osc2.connect(filter);
+    filter.connect(gain);
+    gain.connect(bgmMasterGain);
+
+    osc1.start(startTime);
+    osc2.start(startTime);
+    osc1.stop(startTime + duration * 1.2);
+    osc2.stop(startTime + duration * 1.2);
+  }
+
+  // 2. 워킹 어쿠스틱 업라이트 베이스
+  function playBassNote(ctx, freq, startTime, duration) {
+    if (!freq) return;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq * 1.04, startTime);
+    osc.frequency.exponentialRampToValueAtTime(freq, startTime + 0.035);
+
+    gain.gain.setValueAtTime(0.001, startTime);
+    gain.gain.linearRampToValueAtTime(0.18, startTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, startTime + Math.min(duration, 0.7));
+
+    osc.connect(gain);
+    gain.connect(bgmMasterGain);
+
+    osc.start(startTime);
+    osc.stop(startTime + Math.min(duration, 0.75));
+  }
+
+  // 3. 소프트 스윙 오프비트 화음 (로즈 피아노 코드)
+  function playChord(ctx, notes, startTime, duration) {
+    if (!notes || notes.length === 0) return;
+    notes.forEach(note => {
+      const freq = NOTE_FREQ[note];
+      if (!freq) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, startTime);
+
+      gain.gain.setValueAtTime(0.001, startTime);
+      gain.gain.linearRampToValueAtTime(0.065, startTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + Math.min(duration, 0.65));
+
+      osc.connect(gain);
+      gain.connect(bgmMasterGain);
+
+      osc.start(startTime);
+      osc.stop(startTime + Math.min(duration, 0.7));
+    });
+  }
+
+  // BGM 무한 연속 루프 스케줄러
+  function scheduleBgmLoop() {
+    if (!isBgmPlaying) return;
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const startTime = ctx.currentTime + 0.05;
+    const BEAT_SEC = 0.52;
+
+    THEME_SCORE.forEach(item => {
+      const noteTime = startTime + (item.t * BEAT_SEC);
+      if (item.m) {
+        const freq = NOTE_FREQ[item.m[0]];
+        playMelodyNote(ctx, freq, noteTime, item.m[1] * BEAT_SEC);
+      }
+      if (item.b) {
+        const freq = NOTE_FREQ[item.b];
+        playBassNote(ctx, freq, noteTime, 0.6 * BEAT_SEC);
+      }
+      if (item.c) {
+        playChord(ctx, item.c, noteTime, 0.6 * BEAT_SEC);
+      }
+    });
+
+    const totalDurationMs = (42.2 * BEAT_SEC) * 1000;
+    bgmLoopTimer = setTimeout(() => {
+      if (isBgmPlaying) {
+        scheduleBgmLoop();
+      }
+    }, totalDurationMs);
+  }
+
+  // BGM 재생 시작
+  function startBgm() {
+    isBgmPlaying = true;
+    localStorage.setItem(STORAGE_KEY_BGM, 'true');
+    const ctx = getAudioContext();
+    if (ctx && bgmMasterGain) {
+      const now = ctx.currentTime;
+      bgmMasterGain.gain.cancelScheduledValues(now);
+      bgmMasterGain.gain.linearRampToValueAtTime(bgmVolume, now + 0.15);
+    }
+    if (bgmLoopTimer) clearTimeout(bgmLoopTimer);
+    scheduleBgmLoop();
+    updateBgmUI();
+  }
+
+  // BGM 일시정지
+  function pauseBgm() {
+    isBgmPlaying = false;
+    localStorage.setItem(STORAGE_KEY_BGM, 'false');
+    if (bgmMasterGain && audioCtx) {
+      const now = audioCtx.currentTime;
+      bgmMasterGain.gain.cancelScheduledValues(now);
+      bgmMasterGain.gain.linearRampToValueAtTime(0, now + 0.15);
+    }
+    if (bgmLoopTimer) {
+      clearTimeout(bgmLoopTimer);
+      bgmLoopTimer = null;
+    }
+    updateBgmUI();
+  }
+
+  // BGM 토글
+  function toggleBgm() {
+    if (isBgmPlaying) {
+      pauseBgm();
+      showToast('⏸️ 배경음악(OST)이 일시정지되었습니다.');
+    } else {
+      startBgm();
+      showToast('🎵 토이스토리 OST "You\'ve Got a Friend in Me" 재생 시작!');
+    }
+  }
+
+  // BGM 볼륨 조정
+  function setBgmVolume(val) {
+    bgmVolume = parseFloat(val);
+    localStorage.setItem(STORAGE_KEY_BGM_VOL, bgmVolume.toString());
+    if (bgmMasterGain && audioCtx && isBgmPlaying) {
+      const now = audioCtx.currentTime;
+      bgmMasterGain.gain.cancelScheduledValues(now);
+      bgmMasterGain.gain.setValueAtTime(bgmVolume, now);
+    }
+  }
+
+  // 주사위 롤링 시 효과음이 잘 들리도록 BGM 볼륨 일시 감쇠(Ducking)
+  function duckBgm(isDucking) {
+    if (!bgmMasterGain || !audioCtx) return;
+    const now = audioCtx.currentTime;
+    if (isDucking) {
+      bgmMasterGain.gain.cancelScheduledValues(now);
+      bgmMasterGain.gain.setValueAtTime(bgmMasterGain.gain.value, now);
+      bgmMasterGain.gain.linearRampToValueAtTime(bgmVolume * 0.15, now + 0.2);
+    } else {
+      bgmMasterGain.gain.cancelScheduledValues(now);
+      bgmMasterGain.gain.setValueAtTime(bgmMasterGain.gain.value, now);
+      bgmMasterGain.gain.linearRampToValueAtTime(isBgmPlaying ? bgmVolume : 0, now + 0.35);
+    }
+  }
+
+  // BGM UI 동기화
+  function updateBgmUI() {
+    if (isBgmPlaying) {
+      btnToggleBgm.classList.remove('paused');
+      bgmText.textContent = 'BGM ON';
+      bgmIcon.textContent = '🎵';
+      vinylRecord.classList.add('spinning');
+      bgmActionIcon.textContent = '⏸️';
+      bgmActionLabel.textContent = '일시정지';
+    } else {
+      btnToggleBgm.classList.add('paused');
+      bgmText.textContent = 'BGM OFF';
+      bgmIcon.textContent = '🔇';
+      vinylRecord.classList.remove('spinning');
+      bgmActionIcon.textContent = '▶️';
+      bgmActionLabel.textContent = '재생하기';
+    }
+    bgmVolumeSlider.value = bgmVolume;
+  }
+
+  // --- 효과음 (주사위 딸깍거림 & 팡파르) ---
   function playDiceClick(timeOffset = 0, pitchVariation = 1.0) {
     if (!isSoundEnabled) return;
     const ctx = getAudioContext();
@@ -137,8 +475,7 @@
 
     const now = ctx.currentTime + timeOffset;
 
-    // 1. 노이즈 버스트 생성 (주사위 모서리 마찰음)
-    const bufferSize = ctx.sampleRate * 0.035; // 35ms
+    const bufferSize = ctx.sampleRate * 0.035;
     const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
     const output = buffer.getChannelData(0);
     for (let i = 0; i < bufferSize; i++) {
@@ -148,7 +485,6 @@
     const whiteNoise = ctx.createBufferSource();
     whiteNoise.buffer = buffer;
 
-    // 밴드패스 필터로 딱딱한 주사위 텍스처 형성
     const filter = ctx.createBiquadFilter();
     filter.type = 'bandpass';
     filter.frequency.setValueAtTime(1400 * pitchVariation, now);
@@ -165,7 +501,6 @@
     whiteNoise.start(now);
     whiteNoise.stop(now + 0.035);
 
-    // 2. 바닥 통통 튀는 저음 충돌음
     const osc = ctx.createOscillator();
     const oscGain = ctx.createGain();
     osc.type = 'triangle';
@@ -182,18 +517,15 @@
     osc.stop(now + 0.045);
   }
 
-  // 2초 동안 이어지는 실감나는 주사위 굴림 사운드 시퀀스
   function playRollingDiceAudio(durationSeconds = 2.0) {
     if (!isSoundEnabled) return;
     const ctx = getAudioContext();
     if (!ctx) return;
 
-    // 2초 동안 18회 불규칙한 간격으로 딸깍거림 발생
     let currentOffset = 0;
     const totalHits = 20;
 
     for (let i = 0; i < totalHits; i++) {
-      // 주사위가 굴러가며 서서히 튀는 간격이 변화하는 물리감
       const interval = 0.06 + Math.random() * 0.07;
       currentOffset += interval;
       if (currentOffset >= durationSeconds - 0.1) break;
@@ -203,14 +535,12 @@
     }
   }
 
-  // 2초 후 주사위가 멈추고 결과가 뜰 때 울리는 신나는 차임벨 효과음
   function playCelebrationFanfare() {
     if (!isSoundEnabled) return;
     const ctx = getAudioContext();
     if (!ctx) return;
 
     const now = ctx.currentTime;
-    // C5, E5, G5, C6 하모니
     const notes = [523.25, 659.25, 783.99, 1046.50];
 
     notes.forEach((freq, idx) => {
@@ -232,7 +562,6 @@
     });
   }
 
-  // --- 사운드 토글 UI ---
   function updateSoundUI() {
     if (isSoundEnabled) {
       soundIcon.textContent = '🔊';
@@ -264,6 +593,7 @@
     syncUIWithData();
     updatePrintDate();
     updateSoundUI();
+    updateBgmUI();
   }
 
   // --- 데이터 불러오기 ---
@@ -274,6 +604,8 @@
     const savedClassName = localStorage.getItem(STORAGE_KEY_CLASS_NAME);
     const savedGasUrl = localStorage.getItem(STORAGE_KEY_GAS_URL);
     const savedSound = localStorage.getItem(STORAGE_KEY_SOUND);
+    const savedBgm = localStorage.getItem(STORAGE_KEY_BGM);
+    const savedBgmVol = localStorage.getItem(STORAGE_KEY_BGM_VOL);
 
     students = savedStudents ? JSON.parse(savedStudents) : [...DEFAULT_STUDENTS];
     roles = savedRoles ? JSON.parse(savedRoles) : JSON.parse(JSON.stringify(DEFAULT_ROLES));
@@ -288,6 +620,14 @@
 
     if (savedSound !== null) {
       isSoundEnabled = savedSound === 'true';
+    }
+
+    if (savedBgm !== null) {
+      isBgmPlaying = savedBgm === 'true';
+    }
+
+    if (savedBgmVol !== null) {
+      bgmVolume = parseFloat(savedBgmVol);
     }
 
     if (savedAssignments) {
@@ -315,12 +655,15 @@
 
     statStudentCount.textContent = `${students.length}명`;
     statRoleCount.textContent = `${roles.length}개`;
-    manageCountPreview.textContent = `${students.length}`;
-    manageStudentCount.textContent = `${students.length}`;
-    manageRoleCount.textContent = `${roles.length}`;
-
-    studentsTextarea.value = students.join(', ');
-    rolesTextarea.value = roles.map(r => `${r.title}:${r.desc || ''}`).join('\n');
+    if (manageCountPreview) {
+      manageCountPreview.textContent = `${students.length}`;
+    }
+    if (editModalStudentCount) {
+      editModalStudentCount.textContent = `${students.length}`;
+    }
+    if (editModalRoleCount) {
+      editModalRoleCount.textContent = `${roles.length}`;
+    }
 
     if (assignments && assignments.length > 0) {
       statStatusBadge.textContent = '배정 완료';
@@ -373,6 +716,9 @@
     diceOverlay.classList.remove('hidden');
     diceProgressFill.style.width = '0%';
     diceTimerCounter.textContent = '2.0초';
+
+    // 주사위 롤링 시 BGM 볼륨 부드럽게 감쇠하여 효과음 부각
+    duckBgm(true);
 
     // 2. 주사위 효과음 재생 (2초 동안 실감나는 롤링 사운드)
     playRollingDiceAudio(2.0);
@@ -443,6 +789,9 @@
     // 3. 주사위 오버레이 닫기
     diceOverlay.classList.add('hidden');
 
+    // BGM 볼륨 원래대로 복원
+    duckBgm(false);
+
     // 4. 배정 완료 효과음 (축하 팡파르 차임벨)
     playCelebrationFanfare();
 
@@ -463,7 +812,7 @@
     isRolling = false;
     btnAssign.disabled = false;
 
-    showToast('🎉 2초 주사위 롤링 완료! 우리 반 1인 1역할이 배정되었습니다!');
+    showToast('🎉 우리 반 1인 1역할이 멋지게 배정되었습니다!');
   }
 
   // 역할 명칭에 어울리는 이모지 매핑
@@ -639,79 +988,283 @@
     window.print();
   }
 
-  // --- 관리 패널 적용 ---
-  function applyStudentsInput() {
-    const raw = studentsTextarea.value.trim();
-    if (!raw) {
-      showToast('⚠️ 학생 이름을 1명 이상 입력해주세요.');
-      return;
-    }
+  // ==========================================================================
+  // 학생 명단 & 역할·업무 내용 수정 모달 관리 로직
+  // (화면상에 상시 노출되지 않고, 버튼 클릭 시 팝업되어 수정 후 '완료' 시 배정 적용)
+  // ==========================================================================
 
-    const parsed = raw
-      .split(/[\n,]+/)
-      .map(s => s.trim())
-      .filter(s => s.length > 0);
+  function openEditModal(initialTab = 'students') {
+    draftStudents = [...students];
+    draftRoles = roles.map(r => ({
+      title: r.title,
+      desc: r.desc || '',
+      icon: r.icon || getRoleEmoji(r.title)
+    }));
 
-    if (parsed.length === 0) {
-      showToast('⚠️ 유효한 학생 이름이 없습니다.');
-      return;
-    }
+    switchEditTab(initialTab);
+    renderEditStudentRows();
+    renderEditRoleRows();
+    updateEditModalCounts();
 
-    students = parsed;
-    saveData();
-    syncUIWithData();
-    showToast(`👦👧 학생 명단이 업데이트되었습니다. (총 ${students.length}명)`);
+    dataEditModal.classList.remove('hidden');
+
+    // 첫 번째 입력 필드로 포커스 이동
+    setTimeout(() => {
+      if (initialTab === 'students') {
+        const firstInput = studentRowsContainer.querySelector('input');
+        if (firstInput) firstInput.focus();
+      } else {
+        const firstInput = roleRowsContainer.querySelector('input');
+        if (firstInput) firstInput.focus();
+      }
+    }, 80);
   }
 
-  function applyRolesInput() {
-    const raw = rolesTextarea.value.trim();
-    if (!raw) {
-      showToast('⚠️ 역할을 1개 이상 입력해주세요.');
+  function closeEditModal() {
+    dataEditModal.classList.add('hidden');
+  }
+
+  function switchEditTab(tab) {
+    currentEditTab = tab;
+    if (tab === 'students') {
+      tabBtnStudents.classList.add('active');
+      tabBtnRoles.classList.remove('active');
+      editTabStudentsContent.classList.remove('hidden');
+      editTabRolesContent.classList.add('hidden');
+    } else {
+      tabBtnRoles.classList.add('active');
+      tabBtnStudents.classList.remove('active');
+      editTabRolesContent.classList.remove('hidden');
+      editTabStudentsContent.classList.add('hidden');
+    }
+  }
+
+  function updateEditModalCounts() {
+    if (editModalStudentCount) {
+      editModalStudentCount.textContent = draftStudents.length;
+    }
+    if (editModalRoleCount) {
+      editModalRoleCount.textContent = draftRoles.length;
+    }
+  }
+
+  function renderEditStudentRows() {
+    studentRowsContainer.innerHTML = '';
+
+    if (draftStudents.length === 0) {
+      const emptyDiv = document.createElement('div');
+      emptyDiv.style.padding = '20px';
+      emptyDiv.style.textAlign = 'center';
+      emptyDiv.style.color = '#94a3b8';
+      emptyDiv.innerHTML = `등록된 학생이 없습니다. 아래 <strong>'+ 학생 1명 추가'</strong> 버튼을 눌러보세요!`;
+      studentRowsContainer.appendChild(emptyDiv);
       return;
     }
 
-    const lines = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    const parsedRoles = [];
+    draftStudents.forEach((name, index) => {
+      const row = document.createElement('div');
+      row.className = 'edit-student-row';
 
-    lines.forEach(line => {
-      let title = line;
-      let desc = '';
-      if (line.includes(':')) {
-        const parts = line.split(':');
-        title = parts[0].trim();
-        desc = parts.slice(1).join(':').trim();
-      } else if (line.includes('-')) {
-        const parts = line.split('-');
-        title = parts[0].trim();
-        desc = parts.slice(1).join('-').trim();
-      }
-      parsedRoles.push({
-        title: title,
-        desc: desc,
-        icon: getRoleEmoji(title)
+      const idxBadge = document.createElement('span');
+      idxBadge.className = 'row-index';
+      idxBadge.textContent = index + 1;
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'edit-input-student';
+      input.value = name;
+      input.placeholder = `학생 ${index + 1} 이름`;
+      input.addEventListener('input', (e) => {
+        draftStudents[index] = e.target.value;
       });
+
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'btn-del-row';
+      delBtn.title = '이 학생 삭제';
+      delBtn.textContent = '✕';
+      delBtn.addEventListener('click', () => {
+        draftStudents.splice(index, 1);
+        renderEditStudentRows();
+        updateEditModalCounts();
+      });
+
+      row.appendChild(idxBadge);
+      row.appendChild(input);
+      row.appendChild(delBtn);
+
+      studentRowsContainer.appendChild(row);
+    });
+  }
+
+  function renderEditRoleRows() {
+    roleRowsContainer.innerHTML = '';
+
+    if (draftRoles.length === 0) {
+      const emptyDiv = document.createElement('div');
+      emptyDiv.style.padding = '20px';
+      emptyDiv.style.textAlign = 'center';
+      emptyDiv.style.color = '#94a3b8';
+      emptyDiv.innerHTML = `등록된 역할이 없습니다. 아래 <strong>'+ 새 역할 추가'</strong> 버튼을 눌러보세요!`;
+      roleRowsContainer.appendChild(emptyDiv);
+      return;
+    }
+
+    draftRoles.forEach((role, index) => {
+      const row = document.createElement('div');
+      row.className = 'edit-role-row';
+
+      const idxBadge = document.createElement('span');
+      idxBadge.className = 'row-index';
+      idxBadge.textContent = index + 1;
+
+      const emojiSpan = document.createElement('span');
+      emojiSpan.className = 'edit-role-emoji';
+      emojiSpan.textContent = role.icon || getRoleEmoji(role.title);
+
+      const titleInput = document.createElement('input');
+      titleInput.type = 'text';
+      titleInput.className = 'edit-input-role-title';
+      titleInput.value = role.title;
+      titleInput.placeholder = '역할 이름 (예: 칠판 도우미)';
+      titleInput.addEventListener('input', (e) => {
+        draftRoles[index].title = e.target.value;
+        const icon = getRoleEmoji(e.target.value);
+        draftRoles[index].icon = icon;
+        emojiSpan.textContent = icon;
+      });
+
+      const descInput = document.createElement('input');
+      descInput.type = 'text';
+      descInput.className = 'edit-input-role-desc';
+      descInput.value = role.desc || '';
+      descInput.placeholder = '업무 및 실천 내용 (예: 칠판 깨끗하게 닦기)';
+      descInput.addEventListener('input', (e) => {
+        draftRoles[index].desc = e.target.value;
+      });
+
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'btn-del-row';
+      delBtn.title = '이 역할 삭제';
+      delBtn.textContent = '✕';
+      delBtn.addEventListener('click', () => {
+        draftRoles.splice(index, 1);
+        renderEditRoleRows();
+        updateEditModalCounts();
+      });
+
+      row.appendChild(idxBadge);
+      row.appendChild(emojiSpan);
+      row.appendChild(titleInput);
+      row.appendChild(descInput);
+      row.appendChild(delBtn);
+
+      roleRowsContainer.appendChild(row);
+    });
+  }
+
+  function addStudentRow() {
+    draftStudents.push('');
+    renderEditStudentRows();
+    updateEditModalCounts();
+
+    const inputs = studentRowsContainer.querySelectorAll('input');
+    if (inputs.length > 0) {
+      const lastInput = inputs[inputs.length - 1];
+      lastInput.focus();
+      lastInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
+  function addRoleRow() {
+    draftRoles.push({
+      title: '',
+      desc: '',
+      icon: '⭐'
+    });
+    renderEditRoleRows();
+    updateEditModalCounts();
+
+    const titleInputs = roleRowsContainer.querySelectorAll('.edit-input-role-title');
+    if (titleInputs.length > 0) {
+      const lastInput = titleInputs[titleInputs.length - 1];
+      lastInput.focus();
+      lastInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
+  function resetDefaultsInModal() {
+    if (confirm('기본 12명 학생 및 12개 역할 데이터로 되돌리시겠습니까?')) {
+      draftStudents = [...DEFAULT_STUDENTS];
+      draftRoles = JSON.parse(JSON.stringify(DEFAULT_ROLES));
+      renderEditStudentRows();
+      renderEditRoleRows();
+      updateEditModalCounts();
+      showToast('🔄 기본 12명 데이터가 채워졌습니다. 완료를 누르면 배정에 적용됩니다.');
+    }
+  }
+
+  function saveAndApplyFromModal() {
+    // 실시간 DOM 입력값 최종 수집 (한글 IME 완성 대응)
+    const studentInputs = studentRowsContainer.querySelectorAll('.edit-input-student');
+    const roleTitleInputs = roleRowsContainer.querySelectorAll('.edit-input-role-title');
+    const roleDescInputs = roleRowsContainer.querySelectorAll('.edit-input-role-desc');
+
+    const finalStudents = [];
+    studentInputs.forEach(inp => {
+      const val = inp.value.trim();
+      if (val) finalStudents.push(val);
     });
 
-    if (parsedRoles.length === 0) {
-      showToast('⚠️ 유효한 역할이 없습니다.');
+    const finalRoles = [];
+    roleTitleInputs.forEach((inp, idx) => {
+      const title = inp.value.trim();
+      if (title) {
+        const desc = roleDescInputs[idx] ? roleDescInputs[idx].value.trim() : '';
+        finalRoles.push({
+          title: title,
+          desc: desc,
+          icon: getRoleEmoji(title)
+        });
+      }
+    });
+
+    if (finalStudents.length === 0) {
+      showToast('⚠️ 학생 이름을 1명 이상 입력해주세요.');
+      switchEditTab('students');
       return;
     }
 
-    roles = parsedRoles;
+    if (finalRoles.length === 0) {
+      showToast('⚠️ 역할 이름을 1개 이상 입력해주세요.');
+      switchEditTab('roles');
+      return;
+    }
+
+    students = finalStudents;
+    roles = finalRoles;
+
+    // 만약 이미 배정된 카드가 있다면, 수정된 역할/설명/학생을 가능한 범위 내에서 동기화 업데이트
+    if (assignments && assignments.length > 0) {
+      assignments.forEach((assign, idx) => {
+        if (roles[idx]) {
+          assign.roleTitle = roles[idx].title;
+          assign.roleDesc = roles[idx].desc;
+          assign.roleIcon = roles[idx].icon;
+        }
+      });
+      if (assignments.length > students.length || assignments.length > roles.length) {
+        assignments = assignments.filter(a => students.includes(a.studentName));
+      }
+    }
+
     saveData();
     syncUIWithData();
-    showToast(`⭐ 역할 목록이 업데이트되었습니다. (총 ${roles.length}개)`);
-  }
+    closeEditModal();
 
-  function resetToDefaults() {
-    if (confirm('기본 12명 학생 및 12개 역할 데이터로 되돌리시겠습니까?')) {
-      students = [...DEFAULT_STUDENTS];
-      roles = JSON.parse(JSON.stringify(DEFAULT_ROLES));
-      assignments = [];
-      saveData();
-      syncUIWithData();
-      showToast('🔄 기본 데이터(학생 12명, 역할 12개)로 초기화되었습니다.');
-    }
+    playCelebrationFanfare();
+    showToast(`✅ 학생 ${students.length}명과 역할 ${roles.length}개가 실제 역할 배정에 반영되었습니다!`);
   }
 
   // --- 구글 시트 모달 연동 ---
@@ -848,44 +1401,20 @@
       saveData();
     });
 
-    btnToggleManage.addEventListener('click', () => {
-      managePanel.classList.toggle('hidden');
-      if (!managePanel.classList.contains('hidden')) {
-        studentsTextarea.focus();
-      }
-    });
+    // 학생·역할 수정 전용 모달 이벤트
+    btnOpenEditModal.addEventListener('click', () => openEditModal('students'));
+    btnCloseEditModal.addEventListener('click', closeEditModal);
+    btnCancelEditModal.addEventListener('click', closeEditModal);
+    btnSaveAndApplyModal.addEventListener('click', saveAndApplyFromModal);
+    btnResetToDefaultsModal.addEventListener('click', resetDefaultsInModal);
 
-    btnCloseManage.addEventListener('click', () => {
-      managePanel.classList.add('hidden');
-    });
+    tabBtnStudents.addEventListener('click', () => switchEditTab('students'));
+    tabBtnRoles.addEventListener('click', () => switchEditTab('roles'));
+    btnAddStudentRow.addEventListener('click', addStudentRow);
+    btnAddRoleRow.addEventListener('click', addRoleRow);
 
-    btnResetDefault.addEventListener('click', resetToDefaults);
-    btnApplyStudents.addEventListener('click', applyStudentsInput);
-    btnApplyRoles.addEventListener('click', applyRolesInput);
-
-    btnQuickAddStudent.addEventListener('click', () => {
-      const name = prompt('추가할 학생의 이름을 입력하세요:');
-      if (name && name.trim()) {
-        students.push(name.trim());
-        saveData();
-        syncUIWithData();
-        showToast(`👦👧 [${name.trim()}] 학생이 추가되었습니다.`);
-      }
-    });
-
-    btnQuickAddRole.addEventListener('click', () => {
-      const title = prompt('새 역할 이름을 입력하세요 (예: 재활용 도우미):');
-      if (title && title.trim()) {
-        const desc = prompt('역할 설명을 간단히 적어주세요 (예: 분리수거함 정리):', '') || '';
-        roles.push({
-          title: title.trim(),
-          desc: desc.trim(),
-          icon: getRoleEmoji(title.trim())
-        });
-        saveData();
-        syncUIWithData();
-        showToast(`⭐ [${title.trim()}] 역할이 추가되었습니다.`);
-      }
+    dataEditModal.addEventListener('click', (e) => {
+      if (e.target === dataEditModal) closeEditModal();
     });
 
     btnOpenSheetLoad.addEventListener('click', () => openSheetModal('load'));
@@ -913,8 +1442,28 @@
       });
     });
 
+    // 토이스토리 OST BGM 이벤트
+    btnToggleBgm.addEventListener('click', toggleBgm);
+    btnPlayPauseBgm.addEventListener('click', toggleBgm);
+    bgmVolumeSlider.addEventListener('input', (e) => setBgmVolume(e.target.value));
+
+    // 브라우저 자동재생 정책 대응: 첫 사용자 인터랙션 시 BGM 자동 재생 시작
+    function enableAudioOnFirstGesture() {
+      getAudioContext();
+      if (isBgmPlaying && !bgmLoopTimer) {
+        startBgm();
+      }
+      document.removeEventListener('click', enableAudioOnFirstGesture);
+      document.removeEventListener('keydown', enableAudioOnFirstGesture);
+      document.removeEventListener('touchstart', enableAudioOnFirstGesture);
+    }
+    document.addEventListener('click', enableAudioOnFirstGesture);
+    document.addEventListener('keydown', enableAudioOnFirstGesture);
+    document.addEventListener('touchstart', enableAudioOnFirstGesture);
+
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
+        if (!dataEditModal.classList.contains('hidden')) closeEditModal();
         if (!sheetModal.classList.contains('hidden')) closeSheetModal();
         if (!swapModal.classList.contains('hidden')) closeSwapModal();
       }

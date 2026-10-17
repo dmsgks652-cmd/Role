@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>우리 반 1인 1역할 배정 도우미 - 토이스토리 에디션</title>
-  <meta name="description" content="토이스토리 감성의 귀엽고 산뜻한 우리 반 1인 1역할 랜덤 배정 웹 애플리케이션 (2초 3D 주사위 롤링 & 효과음, A4 인쇄 지원)">
+  <meta name="description" content="토이스토리 감성의 귀엽고 산뜻한 우리 반 1인 1역할 랜덤 배정 웹 애플리케이션 (A4 인쇄 지원)">
   <meta property="og:title" content="우리 반 1인 1역할 배정 도우미">
   <meta property="og:description" content="토이스토리 테마의 신나는 학급 1인 1역할 랜덤 매칭 도우미">
   <meta property="og:type" content="website">
@@ -44,6 +44,10 @@
 
       <!-- 상단 액션 바: 구글 시트 연동 & 사운드 & 인쇄 버튼 -->
       <div class="header-actions">
+        <button id="btnToggleBgm" class="btn btn-toystory-bgm" title="토이스토리 배경음악 켜기/끄기">
+          <span id="bgmIcon" class="bgm-icon">🎵</span>
+          <span id="bgmText" class="bgm-text">BGM ON</span>
+        </button>
         <button id="btnToggleSound" class="btn btn-sound" title="효과음 켜기/끄기">
           <span id="soundIcon">🔊</span>
           <span id="soundText">효과음 ON</span>
@@ -60,6 +64,28 @@
           <span class="btn-icon">🖨️</span>
           <span class="btn-text">A4 인쇄 / PDF</span>
         </button>
+      </div>
+    </div>
+
+    <!-- 토이스토리 OST 배경음악 플레이어 바 (인쇄 시 숨김) -->
+    <div class="bgm-banner no-print" aria-label="토이스토리 배경음악 제어기">
+      <div class="bgm-banner-inner">
+        <div class="bgm-info-group">
+          <span class="vinyl-record" id="vinylRecord">💿</span>
+          <div class="bgm-text-meta">
+            <span class="bgm-badge">TOY STORY OST 🎷</span>
+          </div>
+        </div>
+        <div class="bgm-controls-group">
+          <button id="btnPlayPauseBgm" class="btn-bgm-action" title="배경음악 재생/일시정지">
+            <span id="bgmActionIcon">⏸️</span>
+            <span id="bgmActionLabel">일시정지</span>
+          </button>
+          <div class="bgm-volume-box">
+            <span class="vol-label">볼륨</span>
+            <input type="range" id="bgmVolumeSlider" class="bgm-volume-slider" min="0" max="1" step="0.05" value="0.25" title="BGM 볼륨 조절">
+          </div>
+        </div>
       </div>
     </div>
   </header>
@@ -107,13 +133,10 @@
         </div>
 
         <div class="control-action-bar">
-          <!-- 핵심 [🎲 역할 배정하기] 버튼 -->
+          <!-- 핵심 [🎲 역할 배정하기] 버튼 (부제 문구 삭제) -->
           <button id="btnAssign" class="btn btn-toystory-launch">
             <span class="btn-dice">🎲</span>
-            <div class="btn-text-block">
-              <span class="btn-main-text">역할 배정하기!</span>
-              <span class="btn-sub-tag">2초 3D 주사위 롤링 & 효과음</span>
-            </div>
+            <span class="btn-main-text">역할 배정하기!</span>
           </button>
 
           <!-- 보조 액션 버튼들 -->
@@ -124,59 +147,9 @@
             <button id="btnCopyResult" class="btn btn-secondary-toystory" title="배정 결과를 텍스트로 복사하여 알림장에 붙여넣기" disabled>
               <span class="btn-icon">📋</span> 결과 텍스트 복사
             </button>
-            <button id="btnToggleManage" class="btn btn-secondary-toystory" title="학생 명단과 역할 목록 직접 편집하기">
-              <span class="btn-icon">✏️</span> 명단·역할 관리 (<span id="manageCountPreview">12</span>)
+            <button id="btnOpenEditModal" class="btn btn-secondary-toystory" title="학생 명단과 역할 이름 및 내용을 수정하는 창 열기">
+              <span class="btn-icon">✏️</span> 학생·역할 수정 (<span id="manageCountPreview">12</span>)
             </button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- 명단 및 역할 관리 패널 (접이식 아코디언, 인쇄 시 숨김) -->
-    <section id="managePanel" class="manage-panel no-print hidden">
-      <div class="manage-card toystory-box">
-        <div class="manage-header">
-          <div class="manage-title-box">
-            <h2 class="manage-title">📝 학생 명단 및 역할 목록 편집</h2>
-            <p class="manage-subtitle">우리 반 인원수와 상황에 맞춰 이름을 추가·수정하거나 역할을 자유롭게 변경하세요.</p>
-          </div>
-          <div class="manage-tools">
-            <button id="btnResetDefault" class="btn btn-outline-danger btn-sm" title="기본 12명 예시 데이터로 초기화">
-              <span class="btn-icon">🔄</span> 기본값(12명) 초기화
-            </button>
-            <button id="btnCloseManage" class="btn btn-icon-only" aria-label="닫기">✕</button>
-          </div>
-        </div>
-
-        <div class="manage-columns">
-          <!-- 학생 관리 칼럼 -->
-          <div class="manage-col">
-            <div class="col-head">
-              <h3 class="col-title">
-                <span>👦👧</span> 학생 명단 (<span id="manageStudentCount">12</span>명)
-              </h3>
-              <button id="btnQuickAddStudent" class="btn btn-xs btn-outline">
-                + 학생 추가
-              </button>
-            </div>
-            <p class="col-tip">쉼표(,)나 줄바꿈으로 한꺼번에 여러 명을 붙여넣을 수도 있습니다.</p>
-            <textarea id="studentsTextarea" class="manage-textarea" rows="6" placeholder="김민준, 이서아, 박도윤, ..."></textarea>
-            <button id="btnApplyStudents" class="btn btn-sm btn-action">학생 명단 적용</button>
-          </div>
-
-          <!-- 역할 관리 칼럼 -->
-          <div class="manage-col">
-            <div class="col-head">
-              <h3 class="col-title">
-                <span>⭐</span> 역할 목록 (<span id="manageRoleCount">12</span>개)
-              </h3>
-              <button id="btnQuickAddRole" class="btn btn-xs btn-outline">
-                + 새 역할 등록
-              </button>
-            </div>
-            <p class="col-tip">형식: 역할이름:역할설명 (예: 칠판 도우미:칠판을 깨끗이 닦기)</p>
-            <textarea id="rolesTextarea" class="manage-textarea" rows="6" placeholder="칠판 도우미:칠판을 깨끗이 닦고 분필 정리하기&#10;우유 도우미:우유 배부 및 우유갑 분리수거..."></textarea>
-            <button id="btnApplyRoles" class="btn btn-sm btn-action">역할 목록 적용</button>
           </div>
         </div>
       </div>
@@ -386,6 +359,67 @@ function doPost(e) {
 
       <div class="modal-footer">
         <button id="btnSaveGasUrl" class="btn btn-primary">URL 설정 저장 및 닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 학생 명단 및 역할·내용 수정 전용 모달 (화면상에 상시 노출되지 않고 클릭 시 표시) -->
+  <div id="dataEditModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="학생 명단 및 역할 내용 수정">
+    <div class="modal-window modal-lg toystory-box">
+      <div class="modal-head">
+        <div class="modal-title-group">
+          <span class="modal-icon">✏️</span>
+          <h3 class="modal-title">학생 명단 및 역할·업무 내용 수정</h3>
+        </div>
+        <button id="btnCloseEditModal" class="btn-close-modal" aria-label="창 닫기">✕</button>
+      </div>
+
+      <div class="modal-body edit-modal-body">
+        <!-- 탭 전환 버튼 (학생 명단 / 역할 및 내용) -->
+        <div class="edit-tabs">
+          <button id="tabBtnStudents" class="edit-tab-btn active" type="button">
+            👦👧 학생 이름 수정 (<span id="editModalStudentCount">12</span>명)
+          </button>
+          <button id="tabBtnRoles" class="edit-tab-btn" type="button">
+            ⭐ 역할 이름 및 업무 내용 수정 (<span id="editModalRoleCount">12</span>개)
+          </button>
+        </div>
+
+        <!-- 1. 학생 명단 탭 -->
+        <div id="editTabStudentsContent" class="edit-tab-panel">
+          <div class="edit-panel-bar">
+            <span class="edit-tip">학생 이름을 입력칸에서 자유롭게 수정하거나 새 학생을 추가하세요.</span>
+            <button id="btnAddStudentRow" class="btn btn-sm btn-toystory-green" type="button">+ 학생 1명 추가</button>
+          </div>
+          <div id="studentRowsContainer" class="edit-rows-scroll">
+            <!-- 자바스크립트로 생성되는 학생별 입력칸 행들 -->
+          </div>
+        </div>
+
+        <!-- 2. 역할 및 업무 내용 탭 -->
+        <div id="editTabRolesContent" class="edit-tab-panel hidden">
+          <div class="edit-panel-bar">
+            <span class="edit-tip">각 역할의 <strong>이름</strong>과 학생들이 실천할 <strong>업무 내용</strong>을 수정하세요.</span>
+            <button id="btnAddRoleRow" class="btn btn-sm btn-toystory-woody" type="button">+ 새 역할 추가</button>
+          </div>
+          <div id="roleRowsContainer" class="edit-rows-scroll">
+            <!-- 자바스크립트로 생성되는 역할명 및 내용 입력칸 행들 -->
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer edit-modal-footer">
+        <div class="footer-left">
+          <button id="btnResetToDefaultsModal" class="btn btn-outline-danger btn-sm" type="button" title="기본 12명 예시 데이터로 복원">
+            🔄 기본값(12명) 초기화
+          </button>
+        </div>
+        <div class="footer-right">
+          <button id="btnCancelEditModal" class="btn btn-secondary" type="button">취소</button>
+          <button id="btnSaveAndApplyModal" class="btn btn-toystory-launch-sm" type="button">
+            <span>✅</span> 완료 (배정에 적용)
+          </button>
+        </div>
       </div>
     </div>
   </div>

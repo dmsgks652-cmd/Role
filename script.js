@@ -1311,7 +1311,20 @@
       if (!response.ok) throw new Error(`서버 응답 오류 (HTTP ${response.status})`);
       const data = await response.json();
 
-      if (data && data.students && data.students.length > 0) students = data.students;
+      if (data && Array.isArray(data.students) && data.students.length > 0) {
+        const normalizedStudents = data.students.map(student => {
+          if (typeof student === 'string' || typeof student === 'number') return String(student).trim();
+          if (student && typeof student === 'object') {
+            const name = student.name ?? student.studentName ?? student.student ?? student['학생이름'] ?? student['이름'] ?? student.value;
+            return (typeof name === 'string' || typeof name === 'number') ? String(name).trim() : '';
+          }
+          return '';
+        }).filter(Boolean);
+        if (!normalizedStudents.length) throw new Error('학생 이름을 찾을 수 없습니다. 시트의 이름 열과 Apps Script 응답을 확인해주세요');
+        students = normalizedStudents;
+        // 기존 배정 결과에는 이전 학생 이름이 남을 수 있으므로 명단 변경 시 초기화
+        if (assignments.length && assignments.some(a => !students.includes(a.studentName))) assignments = [];
+      }
       if (data && data.roles && data.roles.length > 0) {
         roles = data.roles.map(r => ({
           title: typeof r === 'string' ? r : r.title,

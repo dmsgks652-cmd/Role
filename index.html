@@ -322,7 +322,7 @@ function doGet(e) {
     if (sheet.getName() === '배정결과') return;
     var data = sheet.getDataRange().getDisplayValues();
     if (!data.length) return;
-    var headers = data[0].map(function(v) { return String(v).replace(/\\s/g, ''); });
+    var headers = data[0].map(function(v) { return String(v).replace(/\s/g, ''); });
     function column(names) {
       for (var i = 0; i &lt; names.length; i++) {
         var idx = headers.indexOf(names[i]);

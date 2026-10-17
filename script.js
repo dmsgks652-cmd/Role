@@ -1373,11 +1373,14 @@
       }
       if (data && Array.isArray(data.roles) && data.roles.length > 0) {
         const normalizedRoles = data.roles.map(normalizeRole).filter(Boolean);
-        if (!normalizedRoles.length) throw new Error('시트에서 역할명을 찾을 수 없습니다. 역할 열 제목을 확인해주세요');
+        if (!normalizedRoles.length) throw new Error('시트에서 역할명을 찾을 수 없습니다. Apps Script의 doGet 코드와 새 버전 배포를 확인해주세요');
         roles = normalizedRoles;
         assignments = [];
       }
 
+      if (!Array.isArray(data.roles) || data.roles.length === 0) {
+        throw new Error('역할 목록이 비어 있습니다. Apps Script에서 역할명 시트를 읽는 doGet 코드를 적용하고 새 버전으로 배포해주세요');
+      }
       saveData();
       syncUIWithData();
       setSheetStatus(`✅ 성공! 시트에서 학생 ${data.students?.length || 0}명, 역할 ${data.roles?.length || 0}개를 성공적으로 불러왔습니다!`, 'success');
